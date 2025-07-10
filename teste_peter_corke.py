@@ -1,3 +1,6 @@
+# Código feito para comparar com os resultados da implementação própria e possibilitar simulação.
+# Arquivos .py para que os gráficos e simulações sejam gerados corretamente.
+
 from roboticstoolbox import DHRobot, RevoluteDH, PrismaticDH
 from roboticstoolbox.tools.trajectory import mtraj, quintic
 import matplotlib.pyplot as plt
