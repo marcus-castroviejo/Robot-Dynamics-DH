@@ -1,9 +1,6 @@
 # Robot-Dynamics-DH
 Kynematics, Dynamics and Control of a robot using the Denavit Hartenberg parameters.
 
-# Robot-Dynamics-DH
-Kynematics, Dynamics and Control of a robot using the Denavit Hartenberg parameters.
-
 ### Código Principal: 
 - Arquivo: **dinamica_2_codigo.ipynb**
 - Primeiramente é criada a classe Robot que possibilita o cálculo da cinemática e dinâmica do robô, com implementação com foco na utilização de variáveis simbólicas, possibilitando fácil alteração de qualquer parâmetro ou configuração do robô.
