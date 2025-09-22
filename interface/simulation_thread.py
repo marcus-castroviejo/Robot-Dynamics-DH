@@ -1,6 +1,6 @@
 """
 ============================================
-    Classe SimulationThread (Corrigida)
+    Classe SimulationThread
 ============================================
 - Execução em thread separada
 

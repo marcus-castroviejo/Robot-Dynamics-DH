@@ -1,9 +1,11 @@
 """
 ============================================
-    Classe RobotControlInterface - OPÇÃO 1: WIDGETS COMPACTOS
+    Classe RobotControlInterface 
 ============================================
 - Interface principal
-- Reduz espaçamento, tamanhos de fonte e altura dos componentes
+Toda a definição dos paineis e campos da interface
+Controle do simulação
+Validação das entradas, atualização dos dados da simulação
 """
 import sys
 import time
@@ -73,7 +75,7 @@ class RobotControlInterface(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # Layout principal com splitter
+        # Layout principal com splitter: vai ter Controle e Visualização
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(5, 5, 5, 5)
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -193,13 +195,12 @@ class RobotControlInterface(QMainWindow):
         double_validator.setDecimals(0)
         double_validator.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
         double_validator.setBottom(1)
-        # Duração
+        # Duração e dt
         self.duration = QLineEdit("5.0")
-        self.duration.setValidator(double_validator)
-        self.duration.setMaximumHeight(35)
-        # Dt
         self.dt = QLineEdit("30")
+        self.duration.setValidator(double_validator)
         self.dt.setValidator(double_validator)
+        self.duration.setMaximumHeight(35)
         self.dt.setMaximumHeight(35)
         
         # Labels
@@ -312,8 +313,12 @@ class RobotControlInterface(QMainWindow):
         
         return panel
 
-    # ======== MÉTODOS FUNCIONAIS (mantidos iguais) ========
-    
+
+
+    # ======== MÉTODOS FUNCIONAIS ========
+
+
+
     def setup_connections(self):
         """Configurar conexões de sinais"""
         try:
@@ -399,18 +404,20 @@ class RobotControlInterface(QMainWindow):
                     field.setFocus()
                     return False
             
+            # D3: limitante (deve estar dentro dos limites)
             d3_initial = float(self.initial_d3.text())
             d3_final = float(self.final_d3.text())
             d3_max = 100*self.robot.d3_max
             
             if d3_initial < 0 or d3_initial > d3_max:
-                QMessageBox.warning(self, "Limite Físico", f"d3 inicial: 0.0 a {d3_max:1f} cm")
+                QMessageBox.warning(self, "Limite Físico", f"d3 inicial: 0.0 a {d3_max} cm")
                 return False
                 
             if d3_final < 0 or d3_final > d3_max:
-                QMessageBox.warning(self, "Limite Físico", f"d3 final: 0.0 a {d3_max:1f} cm")
+                QMessageBox.warning(self, "Limite Físico", f"d3 final: 0.0 a {d3_max} cm")
                 return False
             
+            # Duração: limitante (deve estar dentro dos limites)
             duration = float(self.duration.text())
             dt = float(self.dt.text()) / 1000
             
@@ -422,6 +429,26 @@ class RobotControlInterface(QMainWindow):
                 QMessageBox.warning(self, "Valor Inválido", "0 < dt < duração")
                 return False
             
+            # Posições: só Warning (pode simular fora dos limites)
+            q1_initial = float(self.initial_q1.text())
+            q2_initial = float(self.initial_q2.text())
+            q1_final = float(self.final_q1.text())
+            q2_final = float(self.final_q2.text())
+            q1_min, q1_max = np.rad2deg(np.array(self.robot.J1_range, float))
+            q2_min, q2_max = np.rad2deg(np.array(self.robot.J2_range, float))
+
+            if q1_initial < q1_min or q1_initial > q1_max:
+                QMessageBox.warning(self, "Limite Físico", f"q1 inicial: {q1_min} a {q1_max} graus")
+            
+            if q1_final < q1_min or q1_final > q1_max:
+                QMessageBox.warning(self, "Limite Físico", f"q1 final: {q1_min} a {q1_max} graus")
+            
+            if q2_initial < q2_min or q2_initial > q2_max:
+                QMessageBox.warning(self, "Limite Físico", f"q2 inicial: {q2_min} a {q2_max} graus")
+            
+            if q2_final < q2_min or q2_final > q2_max:
+                QMessageBox.warning(self, "Limite Físico", f"q2 final: {q2_min} a {q2_max} graus")
+
             return True
             
         except Exception as e:

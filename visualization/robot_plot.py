@@ -5,7 +5,7 @@
 - Gráficos do Cocoabot
 
 É aqui que todos os gráficos da interface são gerados:
-- 4 plots: 3D, vista XY, vista lateral, workspace
+- 4 plots: 3D, vista superior XY, vista lateral RZ, grafico q(t)
 - Esqueleto do robô, atualizac1ão em tempo real...
 
 """
@@ -33,6 +33,7 @@ class RobotPlot3D(FigureCanvas):
             
             # Inicializar linhas
             self.init_plot_lines()          # Inicializa as linhas do Robô, Trajetória e Alvo
+            self.plot_position_graph()
             self.plot_workspace_views()     
             
             self.fig.tight_layout()
@@ -64,7 +65,6 @@ class RobotPlot3D(FigureCanvas):
         
         # Posição das Juntas (q)
         self.ax_position = self.fig.add_subplot(223)
-        self.plot_position_graph()
 
         # Plot RZ (Vista Lateral)
         self.ax_rz = self.fig.add_subplot(224)
@@ -169,6 +169,7 @@ class RobotPlot3D(FigureCanvas):
             self.q1_data = []
             self.q2_data = []
             self.q3_data = []
+            # Mexer aqui pra adicionar controle tbm
             
             # TODA A CONFIGURAÇÃO AQUI:
             self.ax_position.set_xlim(0, 5)

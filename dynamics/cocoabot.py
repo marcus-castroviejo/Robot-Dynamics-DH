@@ -10,7 +10,7 @@ from config import RRPParameters as params
 
 
 class CocoaBot:
-    """Adaptação da classe Robot para o Cocoabot (RRP)"""
+    """Adaptação da classe Robot (roboot_dynamics.py) para o Cocoabot (RRP)"""
     
     def __init__(self):
         # Parâmetros do robô RRP
@@ -44,14 +44,14 @@ class CocoaBot:
         )
         
     def forward_kinematics(self, q1, q2, d3):
-        """Cinemática direta baseada nas suas matrizes de transformação"""
+        """Cinemática direta"""
         r = self.robot_dynamics
         q = [q1, q2, d3]
         pos = r.eval_matrix(matrix=r.base_to_end_effector[:3,3], q=q)
         return np.array(pos, dtype=float).flatten()
 
     def get_joint_positions(self, q1, q2, d3):
-        """Posições das juntas baseadas nas suas matrizes de transformação"""
+        """Posições das juntas (desejadas)"""
         r = self.robot_dynamics
         q = [q1, q2, d3]
         positions = [np.array([0.0, 0.0, 0.0])]        
@@ -60,10 +60,29 @@ class CocoaBot:
         return positions
     
     def calculate_dynamics(self, q, qd, qdd):
-        """Calcular dinâmica usando sua implementação"""
+        """Calcular dinâmica"""
         # Use sua classe Robot completa
         r = self.robot_dynamics
         M = r.eval_matrix(r.inertia_matrix, q=q)
         C = r.eval_matrix(r.coriolis_matrix, q=q, dq=qd)
         G = r.eval_matrix(r.gravity_vector, q=q)
         return M, C, G
+
+    def get_controlled_joint_positions(self, q1, q2, q3):
+        """Posições reais do robô"""
+        r = self.robot_dynamics
+        q = [q1, q2, q3]
+        pass
+
+    def calculated_torque_control(self, ):
+        ts = 0.3            # Settling time com 5% tolerância
+        zeta = 0.59         # Overshoot de 10%
+
+        wn = 3/(zeta*ts)
+        p = 5*zeta*wn
+
+        # Cálculo dos Ganhos
+        Kp = np.diag(3*[wn**2 + 2*zeta*wn*p])
+        Kd = np.diag(3*[2*zeta*wn + p])
+        Ki = np.diag(3*[wn**2*p])
+        pass
