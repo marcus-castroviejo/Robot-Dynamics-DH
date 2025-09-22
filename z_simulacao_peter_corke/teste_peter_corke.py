@@ -92,8 +92,8 @@ M = cocoabot.inertia(q)              # M(q)
 
 # PLOTS ============================================================
 traj.plot()
-# cocoabot.plot(q)
-# cocoabot.teach(q=q0)
+cocoabot.plot(q)
+cocoabot.teach(q=q0)
 
 
 # ANIMAÇÃO DA TRAJETÓRIA ============================================================
