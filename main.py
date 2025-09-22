@@ -64,7 +64,6 @@ def main():
         
         # Mensagem de inicialização
         window.update_status("Interface iniciada com sucesso")
-        window.update_status("Versão 2.0 - Interface corrigida e melhorada")
         
         # Executar aplicação
         sys.exit(app.exec())
