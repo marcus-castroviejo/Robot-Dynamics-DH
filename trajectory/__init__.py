@@ -1,4 +1,4 @@
 """Módulo de geração de trajetórias"""
-from .trajectory_generator import TrajectoryGeneratorRRP
+from .trajectory_generator import TrajectoryGenerator
 
-__all__ = ["TrajectoryGeneratorRRP"]
+__all__ = ["TrajectoryGenerator"]

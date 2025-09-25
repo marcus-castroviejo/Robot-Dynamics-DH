@@ -1,22 +1,36 @@
 """
-============================================
-    Classe Cocoabot 
-============================================ 
+=================================================================================================================
+                                                Classe Cocoabot 
+=================================================================================================================
+- Dinâmica e Cinemática do CocoaBot
+
+Campos deste código:
+["Setup Inicial"]:              Inicialização, Configuração, Criação do CocoaBot
+["Dinâmica e Cinemática"]:      Forward Kynematics, Dinâmica [Inércia, Coriolis, Gravidade]
+["Controlador"]:                Controlador
 """
 from sympy import *
 import numpy as np
 from dynamics import Robot
-from config import RRPParameters as params
+from config import RobotParameters as params
 
 
 class CocoaBot:
     """Adaptação da classe Robot (roboot_dynamics.py) para o Cocoabot (RRP)"""
     
+    """
+    =================================================================================================================
+                                                Setup inicial
+    =================================================================================================================
+    """
+
+    """--------------------------- __init__() ---------------------------"""
     def __init__(self):
         # Parâmetros do robô RRP
         self.setup_robot()
         self.setup_full_robot()
-        
+    
+    """--------------------------- Parâmetros Numéricos ---------------------------"""
     def setup_robot(self):
         """Configuração do robô: parâmetros"""
         # Parâmetros físicos
@@ -32,6 +46,7 @@ class CocoaBot:
         # Tabela DH
         self.dh_table = params.DH_TABLE
     
+    """--------------------------- Criação do CocoaBot ---------------------------"""
     def setup_full_robot(self):
         """Cria o robo da classe Robot"""
         self.robot_dynamics = Robot(
@@ -42,7 +57,14 @@ class CocoaBot:
             inertias=self.inertias,
             g_vec=self.g_vec
         )
-        
+    
+    """
+    =================================================================================================================
+                                                Dinâmica e Cinemática
+    =================================================================================================================
+    """
+
+    """--------------------------- Forward Kinematics: posição do efetuador final ---------------------------"""
     def forward_kinematics(self, q1, q2, d3):
         """Cinemática direta"""
         r = self.robot_dynamics
@@ -50,6 +72,7 @@ class CocoaBot:
         pos = r.eval_matrix(matrix=r.base_to_end_effector[:3,3], q=q)
         return np.array(pos, dtype=float).flatten()
 
+    """--------------------------- Forward Kinematics: posição de cada junta ---------------------------"""
     def get_joint_positions(self, q1, q2, d3):
         """Posições das juntas (desejadas)"""
         r = self.robot_dynamics
@@ -59,6 +82,7 @@ class CocoaBot:
         positions.extend([np.array(posi, dtype=float).flatten() for posi in joint_positions])
         return positions
     
+    """--------------------------- Inercia, Coriolis e Gravidade ---------------------------"""
     def calculate_dynamics(self, q, qd, qdd):
         """Calcular dinâmica"""
         # Use sua classe Robot completa
@@ -68,12 +92,20 @@ class CocoaBot:
         G = r.eval_matrix(r.gravity_vector, q=q)
         return M, C, G
 
+    """
+    =================================================================================================================
+                                                Controlador (Em implementação)
+    =================================================================================================================
+    """
+
+    """--------------------------- (Em implementação) ---------------------------"""
     def get_controlled_joint_positions(self, q1, q2, q3):
         """Posições reais do robô"""
         r = self.robot_dynamics
         q = [q1, q2, q3]
         pass
-
+    
+    """--------------------------- (Em implementação) ---------------------------"""
     def calculated_torque_control(self, ):
         ts = 0.3            # Settling time com 5% tolerância
         zeta = 0.59         # Overshoot de 10%

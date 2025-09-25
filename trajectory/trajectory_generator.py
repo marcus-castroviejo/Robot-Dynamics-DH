@@ -1,14 +1,31 @@
 """
-============================================
-    Classe TrajectoryGeneratorRRP
-============================================
+=================================================================================================================
+                                                Classe TrajectoryGenerator
+=================================================================================================================
+- Geração de Trajetória como um Polinômio de Quinta Ordem
+
+Input:
+    - q0: posição inicial [q1, q2, q3]
+    - qf: posição final [q1, q2, q3]
+    - tf: tempo final (duração)
+    - dt: intervalo de tempo em que a trajetória vai ser avaliada
+
+Output: Dados de posição, velocidade e aceleração a cada [t(k) = k*dt,   k = 0, 1, ..., (tf/dt=f)]
+    - [ 
+        (t[0], pos[0], vel[0], acc[0]),         # Dados iniciais:   [(k = 0) -> (t(k) = 0)]
+        (...),
+        (t[k], pos[k], vel[k], acc[k]),         # Dados parciais:   [(k = k) -> (t(k) = k*dt)]
+        (...),
+        (t[f], pos[f], vel[f], acc[f])          # Dados finais:     [(k = f) -> (t(f) = tf)]
+    ]
 """
 import numpy as np
 
 
-class TrajectoryGeneratorRRP:
-    """Gerador de trajetórias"""
+class TrajectoryGenerator:
+    """Gerador de trajetórias: polinômio de quinta ordem"""
     
+    """--------------------------- Calcula os coeficientes ---------------------------"""
     @staticmethod
     def coeff_traj(q0, qf, tf):
         """Calcula coeficientes do polinômio de quinta ordem"""
@@ -21,6 +38,7 @@ class TrajectoryGeneratorRRP:
         a5 = 6 * D / tf**5
         return [a0, a1, a2, a3, a4, a5]
     
+    """--------------------------- Calcula a posição, velocidade e aceleração ---------------------------"""
     @staticmethod
     def calc_traj(a, t):
         """Calcula trajetória, velocidade e aceleração"""
@@ -29,6 +47,7 @@ class TrajectoryGeneratorRRP:
         qdd = 2*a[2] + 6*a[3]*t + 12*a[4]*t**2 + 20*a[5]*t**3
         return q, qd, qdd
     
+    """--------------------------- Gera a trajetória ---------------------------"""
     @classmethod
     def generate_trajectory(cls, q0, qf, tf, dt=0.01):
         """Gera a trajetória completa"""

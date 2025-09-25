@@ -1,4 +1,4 @@
 """Módulo de visualização"""
-from .robot_plot import RobotPlot3D
+from .robot_plot import RobotPlot
 
 __all__ = ["RobotPlot3D"]
