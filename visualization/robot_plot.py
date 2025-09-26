@@ -80,13 +80,13 @@ class RobotPlot(FigureCanvas):
         self.ax_xy.set_xlabel('X (m)')
         self.ax_xy.set_ylabel('Y (m)')
         self.ax_xy.set_title('Vista Superior (XY)')
-        self.ax_xy.grid(True)
+        self.ax_xy.grid(True, alpha=0.3)
         self.ax_xy.set_aspect('equal')  # deixa os eixos em mesma proporção
         
         # Posição das Juntas (q(t))
         self.ax_position = self.fig.add_subplot(223)
-        self.ax_position.set_xlim(0, 5)
-        self.ax_position.set_ylim(-0.5, 3.5)
+        self.ax_position.set_xlim(0, 1)
+        self.ax_position.set_ylim(-5, 165)
         self.ax_position.set_xlabel('Tempo (s)')
         self.ax_position.set_ylabel('Posição')
         self.ax_position.set_title('Posição das Juntas vs Tempo')
@@ -99,7 +99,7 @@ class RobotPlot(FigureCanvas):
         self.ax_rz.set_xlabel('Distância do centro (m)')
         self.ax_rz.set_ylabel('Z (m)')
         self.ax_rz.set_title('Vista Lateral (RZ)')
-        self.ax_rz.grid(True)
+        self.ax_rz.grid(True, alpha=0.3)
         self.ax_rz.set_aspect('equal')
         
     """--------------------------- Configuração das Linhas ---------------------------"""
@@ -118,7 +118,11 @@ class RobotPlot(FigureCanvas):
         self.traj_line_3d, = self.ax_3d.plot([], [], [], 'k:', alpha=0.7, label='Trajetória')
         self.traj_line_xy, = self.ax_xy.plot([], [], 'k:', alpha=0.7, label='Trajetória')
         self.traj_line_rz, = self.ax_rz.plot([], [], 'k:', alpha=0.7, label='Trajetória')
-        # [adicionar trajetória no plot q(t)]
+        
+        # Trajetória (plot de posição q(t))
+        self.traj_line_q1, = self.ax_position.plot([], [], 'b:', alpha=0.7, label='q1_ref(t)')
+        self.traj_line_q2, = self.ax_position.plot([], [], 'r:', alpha=0.7, label='q2_ref(t)')
+        self.traj_line_q3, = self.ax_position.plot([], [], 'g:', alpha=0.7, label='q3_ref(t)')
         
         # Target (ponto verde)
         self.target_3d, = self.ax_3d.plot([], [], [], 'go', markersize=10, label='Alvo')
@@ -198,10 +202,22 @@ class RobotPlot(FigureCanvas):
             print(f"Erro ao plotar workspace: {e}")
 
     """--------------------------- Plotar a Trajetória desejada ---------------------------"""
-    def set_trajectory(self, trajectory_points):
+    def set_trajectory(self, trajectory, trajectory_points):
         """Plotar a trajetória desejada"""
         try:
-            if trajectory_points:
+            if trajectory and trajectory_points:
+                # Trajectory
+                t = [ti for ti, _, _, _ in trajectory]
+                q_joints = [q_joint for _, q_joint, _, _ in trajectory]
+                q1 = [q1 for q1, _, _ in q_joints]
+                q2 = [q2 for _, q2, _ in q_joints]
+                q3 = [q3 for _, _, q3 in q_joints]
+
+                self.traj_line_q1.set_data(t, np.rad2deg(q1))
+                self.traj_line_q2.set_data(t, np.rad2deg(q2))
+                self.traj_line_q3.set_data(t, 1000.0*np.array(q3))
+
+                # Position
                 x_coords = [point[0] for point in trajectory_points]
                 y_coords = [point[1] for point in trajectory_points]
                 z_coords = [point[2] for point in trajectory_points]
@@ -271,9 +287,9 @@ class RobotPlot(FigureCanvas):
             self.q3_data.append(d3)
 
             # Conversão de unidade
-            q1_data = np.rad2deg(np.array(self.q1_data))    # rad -> deg
-            q2_data = np.rad2deg(np.array(self.q2_data))    # rad -> deg
-            q3_data = 1000*np.array(self.q3_data)           # m -> mm
+            q1_data = np.rad2deg(self.q1_data)          # rad -> deg
+            q2_data = np.rad2deg(self.q2_data)          # rad -> deg
+            q3_data = 1000*np.array(self.q3_data)       # m -> mm
             
             # Atualizar linhas
             self.q1_line.set_data(self.time_data, q1_data)
@@ -311,6 +327,8 @@ class RobotPlot(FigureCanvas):
             self.q1_line.set_data([], [])
             self.q2_line.set_data([], [])
             self.q3_line.set_data([], [])
+            self.ax_position.set_xlim(0, 1)
+            self.ax_position.set_ylim(-5, 165)
             
             self.draw()
             

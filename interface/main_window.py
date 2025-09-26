@@ -422,11 +422,11 @@ class RobotControlInterface(QMainWindow):
 
             # [Update plot]: posiciona o robô, adiciona a Trajetória Completa e a Posição Final nos plots
             if hasattr(self, 'robot_plot'):
-                self.robot_plot.update_robot_position(*q0)
-                self.robot_plot.reset_position_graph()
-                self.robot_plot.set_trajectory(trajectory_points)
+                self.robot_plot.update_robot_position(*q0)                          # Posiciona o robô com q0
+                self.robot_plot.reset_position_graph()                              # Reseta o plot q(t)
+                self.robot_plot.set_trajectory(self.trajectory, trajectory_points)  # Adiciona a Trajetória Completa    ([Adicionar a trajetória no plot q(t)])
                 x_final, y_final, z_final = self.robot.forward_kinematics(*qf)
-                self.robot_plot.set_target_position(x_final, y_final, z_final)
+                self.robot_plot.set_target_position(x_final, y_final, z_final)      # Adiciona a Posição Final
             
             # Ativa o Botão de "Simular"
             self.btn_simulate.setEnabled(True)
