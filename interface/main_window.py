@@ -30,7 +30,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QDoubleValidator
 from PyQt6.QtCore import QLocale
-from dynamics import CocoaBot
+from dynamics import CocoaBot, CalculatedTorqueController
 from trajectory import TrajectoryGenerator
 from visualization import RobotPlot
 from .simulation_thread import SimulationThread
@@ -260,6 +260,8 @@ class RobotControlInterface(QMainWindow):
         # Checkbox Controlador                                  # (Linha 0): [checkbox] | "Usar controlador Torque Calculado"
         self.use_controller = QCheckBox("Usar controlador Torque Calculado")
         layout.addWidget(self.use_controller)
+        self.use_controller.setChecked(True)
+        self.update_controller(True)
         
         # Velocidade                                            # (Linha 1): "Velocidade:" | [slider] | "0.6x"
         speed_layout = QHBoxLayout()
@@ -271,7 +273,7 @@ class RobotControlInterface(QMainWindow):
         self.speed_slider.setValue(10)
         speed_layout.addWidget(self.speed_slider)
         # Label
-        self.speed_label = QLabel("1.0x") # --> Velocidade inicial (simulação): 0.6x
+        self.speed_label = QLabel("1.0x")       # --> Velocidade inicial (simulação): 1.0x
         self.speed_label.setFont(QFont("Arial", 11))
         self.speed_label.setMinimumWidth(40)
         speed_layout.addWidget(self.speed_label)
@@ -371,6 +373,7 @@ class RobotControlInterface(QMainWindow):
             self.btn_stop.clicked.connect(self.stop_simulation)
             self.btn_send_robot.clicked.connect(self.send_to_robot)
             self.speed_slider.valueChanged.connect(self.update_speed)
+            self.use_controller.clicked.connect(self.update_controller)
             
             # Conecta com a Thread de simulation_thread.py
             # Quando os sinais chegam, as funções de update são acionadas
@@ -529,7 +532,6 @@ class RobotControlInterface(QMainWindow):
             
             # Passa a trajetória e o controle para o thread                 # Configuração da Simulation_Thread
             self.simulation_thread.set_trajectory(self.trajectory)
-            self.simulation_thread.set_controller(self.use_controller.isChecked())
             
             # Ativa/desativa os botões
             self.btn_simulate.setEnabled(False)
@@ -590,6 +592,18 @@ class RobotControlInterface(QMainWindow):
             self.simulation_thread.set_speed(speed)
         except Exception as e:
             print(f"Erro ao atualizar velocidade: {e}")
+    
+    """--------------------------- 1.8) Funções de Controle -> Atualizar Controlador ---------------------------"""
+    def update_controller(self, checked):
+        try:
+            if checked:
+                self.controller = CalculatedTorqueController(self.robot)
+            else:
+                if hasattr(self, 'controller'):
+                    self.controller = None
+            self.simulation_thread.set_controller(self.controller)
+        except Exception as e:
+            print(f"Erro ao atualizar controlador: {e}")
     
     """
     =================================================================================================================

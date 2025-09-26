@@ -7,7 +7,6 @@
 Campos deste código:
 ["Setup Inicial"]:              Inicialização, Configuração, Criação do CocoaBot
 ["Dinâmica e Cinemática"]:      Forward Kynematics, Dinâmica [Inércia, Coriolis, Gravidade]
-["Controlador"]:                Controlador
 """
 from sympy import *
 import numpy as np
@@ -89,32 +88,5 @@ class CocoaBot:
         r = self.robot_dynamics
         M = r.eval_matrix(r.inertia_matrix, q=q)
         C = r.eval_matrix(r.coriolis_matrix, q=q, dq=qd)
-        G = r.eval_matrix(r.gravity_vector, q=q)
+        G = r.eval_matrix(r.gravity_vector, q=q)                        # PROBLEMA (!!!)
         return M, C, G
-
-    """
-    =================================================================================================================
-                                                Controlador (Em implementação)
-    =================================================================================================================
-    """
-
-    """--------------------------- (Em implementação) ---------------------------"""
-    def get_controlled_joint_positions(self, q1, q2, q3):
-        """Posições reais do robô"""
-        r = self.robot_dynamics
-        q = [q1, q2, q3]
-        pass
-    
-    """--------------------------- (Em implementação) ---------------------------"""
-    def calculated_torque_control(self, ):
-        ts = 0.3            # Settling time com 5% tolerância
-        zeta = 0.59         # Overshoot de 10%
-
-        wn = 3/(zeta*ts)
-        p = 5*zeta*wn
-
-        # Cálculo dos Ganhos
-        Kp = np.diag(3*[wn**2 + 2*zeta*wn*p])
-        Kd = np.diag(3*[2*zeta*wn + p])
-        Ki = np.diag(3*[wn**2*p])
-        pass
