@@ -266,5 +266,6 @@ class Robot:
         if ddq: matrix = matrix.subs(zip(self.ddq, ddq))
         if dq: matrix = matrix.subs(zip(self.dq, dq))
         if q: matrix = matrix.subs(zip(self.q, q))
-        return matrix.simplify()
 
+        simplified_matrix = matrix.simplify()
+        return simplified_matrix if simplified_matrix else matrix

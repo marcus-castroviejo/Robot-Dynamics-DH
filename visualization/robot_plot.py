@@ -120,9 +120,9 @@ class RobotPlot(FigureCanvas):
         self.traj_line_rz, = self.ax_rz.plot([], [], 'k:', alpha=0.7, label='Trajetória')
         
         # Trajetória (plot de posição q(t))
-        self.traj_line_q1, = self.ax_position.plot([], [], 'b:', alpha=0.7, label='q1_ref(t)')
-        self.traj_line_q2, = self.ax_position.plot([], [], 'r:', alpha=0.7, label='q2_ref(t)')
-        self.traj_line_q3, = self.ax_position.plot([], [], 'g:', alpha=0.7, label='q3_ref(t)')
+        self.traj_line_q1, = self.ax_position.plot([], [], 'b:', alpha=0.7, label='$q_1^{ref}(t)$ [deg]')
+        self.traj_line_q2, = self.ax_position.plot([], [], 'r:', alpha=0.7, label='$q_2^{ref}(t)$ [deg]')
+        self.traj_line_q3, = self.ax_position.plot([], [], 'g:', alpha=0.7, label='$q_3^{ref}(t)$ [mm]')
         
         # Target (ponto verde)
         self.target_3d, = self.ax_3d.plot([], [], [], 'go', markersize=10, label='Alvo')
@@ -130,9 +130,9 @@ class RobotPlot(FigureCanvas):
         self.target_rz, = self.ax_rz.plot([], [], 'go', markersize=10, label='Alvo')
         
         # Linhas do Plot das Juntas
-        self.q1_line, = self.ax_position.plot([], [], 'b-', linewidth=2, label='q1(t) [deg]')
-        self.q2_line, = self.ax_position.plot([], [], 'r-', linewidth=2, label='q2(t) [deg]') 
-        self.q3_line, = self.ax_position.plot([], [], 'g-', linewidth=2, label='q3(t) [mm]')
+        self.q1_line, = self.ax_position.plot([], [], 'b-', linewidth=2, label='$q_1(t)$ [deg]')
+        self.q2_line, = self.ax_position.plot([], [], 'r-', linewidth=2, label='$q_2(t)$ [deg]') 
+        self.q3_line, = self.ax_position.plot([], [], 'g-', linewidth=2, label='$q_3(t)$ [mm]')
         
         # Adicionar legendas
         self.ax_xy.legend()

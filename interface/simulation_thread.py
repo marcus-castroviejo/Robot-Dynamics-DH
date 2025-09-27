@@ -73,9 +73,11 @@ class SimulationThread(QThread):
             self.status_updated.emit("Simulação iniciada")
             
             total_points = len(self.trajectory)
+
+            if self.controller:
+                self.controller.set_trajectory(self.trajectory)
             
             # Itera sobre os pontos da trajetória e emite sinais para a Main_Window, que atualiza os plots
-            # (!!!) O controle vai ter que entrar aqui no loop
             for i, trajectory in enumerate(self.trajectory):
                 t, q_traj, qd_traj, qdd_traj = trajectory
 
@@ -84,12 +86,10 @@ class SimulationThread(QThread):
                 
                 # Controlador
                 if self.controller:
-                    errors, q_joints, qd_joints, qdd_joints, tau = self.controller.control_position(*trajectory[1:])
+                    errors, q_joints, qd_joints, qdd_joints, tau = self.controller.update_control_position()
                 else:
                     errors, q_joints, qd_joints, qdd_joints, tau = 0.0, q_traj, qd_traj, qdd_traj, 0.0
                 
-                # print(t, q_joints)
-
                 # Atualizar a posição das juntas
                 q1, q2, d3 = q_joints
                 self.position_updated.emit(float(t), float(q1), float(q2), float(d3))
@@ -102,7 +102,7 @@ class SimulationThread(QThread):
                 self.status_updated.emit(f"Simulando... {progress}% | t={t:.2f}s")
                 
                 # Sleep baseado na velocidade
-                sleep_time = max(10, int(100 / self.speed_factor))          # 100 fica legal
+                sleep_time = max(10, int(100 / self.speed_factor))
                 self.msleep(sleep_time)
             
             if self.is_running:
@@ -114,46 +114,6 @@ class SimulationThread(QThread):
             self.status_updated.emit(f"Erro na simulação: {str(e)}")
         finally:
             self.is_running = False
-    
-    # def run(self):
-    #     """Executar simulação"""
-    #     # A Simulação é iniciada em main_window.py pela função .start()
-    #     try:
-    #         self.is_running = True
-    #         self.status_updated.emit("Simulação iniciada")
-            
-    #         total_points = len(self.trajectory)
-            
-    #         # Itera sobre os pontos da trajetória e emite sinais para a Main_Window, que atualiza os plots
-    #         # (!!!) O controle vai ter que entrar aqui no loop
-    #         for i, (t, q_joints, qd_joints, qdd_joints) in enumerate(self.trajectory):
-    #             if not self.is_running:
-    #                 break
-                
-    #             # Atualizar a posição das juntas
-    #             q1, q2, d3 = q_joints
-    #             self.position_updated.emit(float(t), float(q1), float(q2), float(d3))
-                
-    #             # Atualizar progresso
-    #             progress = int((i + 1) / total_points * 100)
-    #             self.progress_updated.emit(progress)
-                
-    #             # Atualizar o Status (log)
-    #             self.status_updated.emit(f"Simulando... {progress}% | t={t:.2f}s")
-                
-    #             # Sleep baseado na velocidade
-    #             sleep_time = max(10, int(100 / self.speed_factor))          # 100 fica legal
-    #             self.msleep(sleep_time)
-            
-    #         if self.is_running:
-    #             self.status_updated.emit("Simulação concluída")
-    #         else:
-    #             self.status_updated.emit("Simulação interrompida")
-                
-    #     except Exception as e:
-    #         self.status_updated.emit(f"Erro na simulação: {str(e)}")
-    #     finally:
-    #         self.is_running = False
     
     """--------------------------- Fim da Simulação ---------------------------"""
     def stop(self):
