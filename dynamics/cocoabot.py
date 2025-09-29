@@ -71,7 +71,7 @@ class CocoaBot:
         pos = r.eval_matrix(matrix=r.base_to_end_effector[:3,3], q=q)
         return np.array(pos, dtype=float).flatten()
 
-    """--------------------------- Forward Kinematics: posição de cada junta ---------------------------"""
+    """--------------------------- Forward Kinematics: juntas -> cartesiano ---------------------------"""
     def get_joint_positions(self, q1, q2, d3):
         """Posições das juntas (desejadas)"""
         r = self.robot_dynamics
@@ -92,12 +92,9 @@ class CocoaBot:
         return M, C, G
 
 
-    """--------------------------- Em construção (!!!!) ---------------------------"""
+    """--------------------------- Inverse Kinematics: cartesiano -> juntas ---------------------------"""
     def inverse_kinematics(self, target_x, target_y, target_z):
-        """
-        Solução analítica específica para robôs RRP
-        Aproveita a estrutura particular deste tipo de robô
-        """
+        """Cinemática inversa"""
         try:
             # q1: orientação no plano XY
             q1 = np.arctan2(target_y, target_x)
