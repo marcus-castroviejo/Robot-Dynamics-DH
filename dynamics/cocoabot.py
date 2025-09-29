@@ -88,5 +88,36 @@ class CocoaBot:
         r = self.robot_dynamics
         M = r.eval_matrix(r.inertia_matrix, q=q)
         C = r.eval_matrix(r.coriolis_matrix, q=q, dq=qd)
-        G = r.eval_matrix(r.gravity_vector, q=q)                        # PROBLEMA (!!!)
+        G = r.eval_matrix(r.gravity_vector, q=q)
         return M, C, G
+
+
+    """--------------------------- Em construção (!!!!) ---------------------------"""
+    def inverse_kinematics(self, target_x, target_y, target_z):
+        """
+        Solução analítica específica para robôs RRP
+        Aproveita a estrutura particular deste tipo de robô
+        """
+        try:
+            # q1: orientação no plano XY
+            q1 = np.arctan2(target_y, target_x)
+            
+            # Alcance radial
+            r = np.sqrt(target_x**2 + target_y**2)
+            
+            # Altura relativa
+            z_rel = self.L1 - target_z
+            
+            # q2: orientação no plano RZ
+            q2 = np.arctan2(r, z_rel)
+
+            # Comprimento do Elo 2
+            hypotenuse = np.sqrt(r**2 + z_rel**2)
+            
+            # d3: extensão prismática
+            d3 = hypotenuse - self.L2
+            
+            return [q1, q2, d3]
+            
+        except Exception as e:
+            return None

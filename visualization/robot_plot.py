@@ -71,7 +71,7 @@ class RobotPlot(FigureCanvas):
         self.ax_3d.set_xlabel('X (m)')
         self.ax_3d.set_ylabel('Y (m)')
         self.ax_3d.set_zlabel('Z (m)')
-        self.ax_3d.set_title('Cocoabot - Vista 3D')
+        self.ax_3d.set_title('Vista 3D')
         
         # Plot XY (vista superior)
         self.ax_xy = self.fig.add_subplot(222)
@@ -125,17 +125,25 @@ class RobotPlot(FigureCanvas):
         self.traj_line_q3, = self.ax_position.plot([], [], 'g:', alpha=0.7, label='$q_3^{ref}(t)$ [mm]')
         
         # Target (ponto verde)
-        self.target_3d, = self.ax_3d.plot([], [], [], 'go', markersize=10, label='Alvo')
-        self.target_xy, = self.ax_xy.plot([], [], 'go', markersize=10, label='Alvo')
-        self.target_rz, = self.ax_rz.plot([], [], 'go', markersize=10, label='Alvo')
+        self.target_3d, = self.ax_3d.plot([], [], [], 'go', markersize=8, label='Alvo')
+        self.target_xy, = self.ax_xy.plot([], [], 'go', markersize=8, label='Alvo')
+        self.target_rz, = self.ax_rz.plot([], [], 'go', markersize=8, label='Alvo')
         
         # Linhas do Plot das Juntas
         self.q1_line, = self.ax_position.plot([], [], 'b-', linewidth=2, label='$q_1(t)$ [deg]')
         self.q2_line, = self.ax_position.plot([], [], 'r-', linewidth=2, label='$q_2(t)$ [deg]') 
         self.q3_line, = self.ax_position.plot([], [], 'g-', linewidth=2, label='$q_3(t)$ [mm]')
+
+        # Linhas de Posicionamento
+        self.x_intial_line, = self.ax_xy.plot([], [], 'b-', alpha=0.5, linewidth=1)
+        self.x_final_line, = self.ax_xy.plot([], [], 'g-', alpha=0.5, linewidth=1)
+        self.y_intial_line, = self.ax_xy.plot([], [], 'b-', alpha=0.5, linewidth=1)
+        self.y_final_line, = self.ax_xy.plot([], [], 'g-', alpha=0.5, linewidth=1)
+        self.r_initial_line, = self.ax_rz.plot([], [], 'b-', alpha=0.5, linewidth=1)
+        self.r_final_line, = self.ax_rz.plot([], [], 'g-', alpha=0.5, linewidth=1)
         
         # Adicionar legendas
-        self.ax_xy.legend()
+        # self.ax_xy.legend()
         self.ax_rz.legend()
         self.ax_position.legend()
     
@@ -149,54 +157,56 @@ class RobotPlot(FigureCanvas):
     def plot_workspace_views(self):
         """Plotar workspace do robô"""
         try:
-            # Ranges de movimentação
+            # Dimensões e limites de movimentação
             L1 = self.robot.L1
             L2 = self.robot.L2
             q1_range = self.robot.J1_range
             q2_range = self.robot.J2_range
             d3_max = self.robot.d3_max
 
-            # --------------------------- WORKSPACE YZ --------------------------- #
-            # Alcance radial no plano XY
-            q2 = np.linspace(*q2_range, 100)
-            r_inner = np.min(np.sin(q2) * L2)
-            r_outer = np.max(np.sin(q2) * (L2 + d3_max))
-
-            # Varredura em q1 (z)
+            # Ranges de movimentação
             q1 = np.linspace(*q1_range, 100)
-            x_inner = r_inner * np.cos(q1)
-            y_inner = r_inner * np.sin(q1)
-            x_outer = r_outer * np.cos(q1)
-            y_outer = r_outer * np.sin(q1)
+            q2 = np.linspace(*q2_range, 100)
+
+            # Hipotenusa mínima e máxima (Elo 2)
+            h_min = L2
+            h_max = L2 + d3_max
+            
+            # Coordenada radial e coordenada Z
+            r_inner = np.array(h_min * np.sin(q2))
+            r_outer = np.array(h_max * np.sin(q2))
+            z_inner = np.array(L1 - h_min * np.cos(q2))
+            z_outer = np.array(L1 - h_max * np.cos(q2))
+
+            # --------------------------- WORKSPACE RZ --------------------------- #
+            # Cria polígono fechado para fill():
+            r_polygon = np.concatenate([r_outer, r_inner[::-1]])
+            z_polygon = np.concatenate([z_outer, z_inner[::-1]])
+
+            # Plotar
+            self.ax_rz.plot(r_outer, z_outer, 'g--', label='Reach máximo')
+            self.ax_rz.plot(r_inner, z_inner, 'r--', label='Reach mínimo')
+            self.ax_rz.fill(r_polygon, z_polygon, alpha=0.2, color='green', label="Workspace RZ")
+            self.ax_rz.legend()
+
+            # --------------------------- WORKSPACE XY --------------------------- #
+            # Alcance radial mínimo e máximo no plano XY
+            r_min = np.min(r_inner)
+            r_max = np.max(r_outer)
+
+            # Coordenas X e Y
+            x_inner = r_min * np.cos(q1)
+            x_outer = r_max * np.cos(q1)
+            y_inner = r_min * np.sin(q1)
+            y_outer = r_max * np.sin(q1)
             
             # Plotar
             self.ax_xy.plot(x_outer, y_outer, 'g--', alpha=0.5, label='Reach máximo')
             self.ax_xy.plot(x_inner, y_inner, 'r--', alpha=0.5, label='Reach mínimo')
-            self.ax_xy.fill(x_inner, y_inner, color='red', alpha=0.2, label='Inacessível')
-            self.ax_xy.legend()
-
-            # --------------------------- WORKSPACE RZ --------------------------- #
-            q2 = q2 - np.pi/4                   # -> (pi/4 ???)
-
-            # Raio interno e externo
-            r_inner = L2
-            r_outer = L2 + d3_max
-            
-            # Valores assumidos
-            r_min = np.array(r_inner * np.sin(q2))
-            z_min = np.array(L1 + r_inner * np.cos(q2))
-            r_max = np.array(r_outer * np.sin(q2))
-            z_max = np.array(L1 + r_outer * np.cos(q2))
-            
-            # Cria polígono fechado para fill():
-            r_polygon = np.concatenate([r_max, r_min[::-1]])
-            z_polygon = np.concatenate([z_max, z_min[::-1]])
-
-            # Plotar
-            self.ax_rz.plot(r_max, z_max, 'g--', label='Reach máximo')
-            self.ax_rz.plot(r_min, z_min, 'r--', label='Reach mínimo')
-            self.ax_rz.fill(r_polygon, z_polygon, alpha=0.2, color='green', label="Workspace RZ")
-            self.ax_rz.legend()
+            x_polygon = np.concatenate([x_outer, x_inner[::-1]])
+            y_polygon = np.concatenate([y_outer, y_inner[::-1]])
+            self.ax_xy.fill(x_polygon, y_polygon, alpha=0.2, color='green', label="Workspace XY")
+            # self.ax_xy.legend()
             
         except Exception as e:
             print(f"Erro ao plotar workspace: {e}")
@@ -245,6 +255,73 @@ class RobotPlot(FigureCanvas):
         except Exception as e:
             print(f"Erro ao definir alvo: {e}")
     
+    """--------------------------- Linhas de posicionamento: plot XY ---------------------------"""
+    def set_xy_pos(self, pos0, posf):
+        """Colocar as linhas de posicionamento no plot XY"""
+        # Dados
+        N = 100
+        x0, y0, _ = pos0
+        xf, yf, _ = posf
+        
+        # Grid
+        grid = np.linspace(-1, 1, N)
+
+        # Plots
+        self.x_intial_line.set_data(N*[x0], grid)
+        self.y_intial_line.set_data(grid, N*[y0])
+        self.x_final_line.set_data(N*[xf], grid)
+        self.y_final_line.set_data(grid, N*[yf])
+
+        self.draw()
+    
+    """--------------------------- Linhas de Posicionamento: plot RZ ---------------------------"""
+    def set_rz_pos(self, pos0, posf):
+        """Colocar as linhas de posicionamento no plot RZ"""
+        # Função para o range de Z
+        def Z_range(r):
+            # Parâmetros
+            L1 = self.robot.L1
+            L2 = self.robot.L2
+            d3_max = self.robot.d3_max
+            q2_range = self.robot.J2_range
+
+            q2 = np.linspace(*q2_range, 200)
+            sin_q2 = np.sin(q2)
+            valid_sin = np.abs(sin_q2) > 1e-6
+            d3 = np.where(valid_sin, r / sin_q2 - L2, np.inf)
+            valid = valid_sin & (d3 >= 0) & (d3 <= d3_max)
+            if not np.any(valid):
+                return None, None
+            z = L1 - (L2 + d3[valid]) * np.cos(q2[valid])
+
+            return np.min(z), np.max(z)
+
+        # Cálculo
+        x0, y0, _ = pos0
+        xf, yf, _ = posf
+        r0 = np.sqrt(x0**2 + y0**2)
+        rf = np.sqrt(xf**2 + yf**2)
+        z0_min, z0_max = Z_range(r0)
+        zf_min, zf_max = Z_range(rf)
+
+        if z0_min is None:
+            self.r_initial_line.set_data([], [])
+            return
+        if zf_min is None:
+            self.r_final_line.set_data([], [])
+            return
+       
+        # Grids
+        N = 100
+        z0_grid = np.linspace(z0_min, z0_max, N)
+        zf_grid = np.linspace(zf_min, zf_max, N)
+        
+        # Plot R
+        self.r_initial_line.set_data(N*[r0], z0_grid)
+        self.r_final_line.set_data(N*[rf], zf_grid)
+
+        self.draw()
+
     """
     =================================================================================================================
                                                 Funções de Update
@@ -334,3 +411,30 @@ class RobotPlot(FigureCanvas):
             
         except Exception as e:
             print(f"Erro ao resetar gráfico de posição: {e}")
+
+    """--------------------------- Reset da Trajetória ---------------------------"""
+    def reset_trajectory(self):
+        """Limpar dados de trajetória de todos os gráficos"""
+        self.traj_line_q1.set_data([], [])
+        self.traj_line_q2.set_data([], [])
+        self.traj_line_q3.set_data([], [])
+        self.traj_line_3d.set_data_3d([], [], [])
+        self.traj_line_xy.set_data([], [])
+        self.traj_line_rz.set_data([], [])
+        self.target_3d.set_data_3d([], [], [])
+        self.target_xy.set_data([], [])
+        self.target_rz.set_data([], [])
+
+        self.draw()
+
+    """--------------------------- Reset das linhas de Posicionamento ---------------------------"""
+    def reset_positioning_lines(self):
+        """Limpar linhas de posicionamento de todos os gráficos"""
+        self.x_intial_line.set_data([], [])
+        self.y_intial_line.set_data([], [])
+        self.x_final_line.set_data([], [])
+        self.y_final_line.set_data([], [])
+        self.r_initial_line.set_data([], [])
+        self.r_final_line.set_data([], [])
+
+        self.draw()

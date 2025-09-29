@@ -37,6 +37,7 @@ class SimulationThread(QThread):
         super().__init__()
         self.trajectory = []
         self.is_running = False
+        self.is_paused = False
         self.speed_factor = 1.0
         self.controller = None
     
@@ -79,6 +80,9 @@ class SimulationThread(QThread):
             
             # Itera sobre os pontos da trajetória e emite sinais para a Main_Window, que atualiza os plots
             for i, trajectory in enumerate(self.trajectory):
+                while self.is_paused and self.is_running:
+                    self.msleep(50)
+
                 t, q_traj, qd_traj, qdd_traj = trajectory
 
                 if not self.is_running:
@@ -114,8 +118,19 @@ class SimulationThread(QThread):
             self.status_updated.emit(f"Erro na simulação: {str(e)}")
         finally:
             self.is_running = False
+            self.is_paused = False
     
     """--------------------------- Fim da Simulação ---------------------------"""
     def stop(self):
         """Parar simulação"""
         self.is_running = False
+
+    """--------------------------- Em construção (!!!!) ---------------------------"""
+    def pause(self):
+        """Pausar a Simulação"""
+        self.is_paused = True
+    
+    """--------------------------- Em construção (!!!!) ---------------------------"""
+    def resume(self):
+        """Pausar a Simulação"""
+        self.is_paused = False

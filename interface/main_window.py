@@ -26,10 +26,10 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QHBoxLayout, QGridLayout, QLabel, QLineEdit, 
                             QPushButton, QGroupBox, QSlider, QTextEdit,
                             QFrame, QCheckBox, QMessageBox, QProgressBar, 
-                            QSplitter)
+                            QSplitter, QRadioButton)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QDoubleValidator
-from PyQt6.QtCore import QLocale
+from PyQt6.QtCore import QLocale, QSignalBlocker
 from dynamics import CocoaBot, CalculatedTorqueController
 from trajectory import TrajectoryGenerator
 from visualization import RobotPlot
@@ -64,6 +64,12 @@ class RobotControlInterface(QMainWindow):
         
         # Coloar o robô na posição de início
         self.update_robot_position(self.initial_t, self.default_q1, self.default_q2, self.default_d3)
+        self.update_trajectory_params()
+        self.update_coordenate_system()
+        print("q0:\t", np.round([np.rad2deg(self.q0[0]), np.rad2deg(self.q0[1]), 100*self.q0[2]], 2))
+        print("qf:\t", np.round([np.rad2deg(self.qf[0]), np.rad2deg(self.qf[1]), 100*self.qf[2]], 2))
+        print("pos0:\t", np.round(self.pos0, 2))
+        print("posf:\t", np.round(self.pos0, 2))
 
     """--------------------------- Inicialização das outras Classes ---------------------------"""
     def init_components(self):
@@ -165,12 +171,17 @@ class RobotControlInterface(QMainWindow):
         double_validator.setDecimals(2)
         double_validator.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
 
+        # Campos de entrada: Sistema de Coordenadas
+        self.radio_joint = QRadioButton("Juntas")
+        self.radio_cartesian = QRadioButton("Cartesiano")
+        self.radio_joint.setChecked(True)
+
         # Campos de entrada: q_0 e q_f
-        self.initial_q1 = QLineEdit("0.0")                  # [entrada] q_0[1]
-        self.initial_q2 = QLineEdit("80.0")                 # [entrada] q_0[2]
+        self.initial_q1 = QLineEdit("0")                    # [entrada] q_0[1]
+        self.initial_q2 = QLineEdit("80")                   # [entrada] q_0[2]
         self.initial_d3 = QLineEdit("3.0")                  # [entrada] q_0[3]
-        self.final_q1 = QLineEdit("90.0")                   # [entrada] q_f[1]
-        self.final_q2 = QLineEdit("135.0")                  # [entrada] q_f[2]
+        self.final_q1 = QLineEdit("90")                     # [entrada] q_f[1]
+        self.final_q2 = QLineEdit("135")                    # [entrada] q_f[2]
         self.final_d3 = QLineEdit("8.0")                    # [entrada] q_f[3]
         # Validador
         self.initial_q1.setValidator(double_validator)
@@ -190,30 +201,36 @@ class RobotControlInterface(QMainWindow):
         """
         OBS - Posicionamento: .addWidget("campo", linha, coluna)
         """
+        # Sistema de Coordenadas
+        sistcoord_label = QLabel("Coordenadas:")
+        layout.addWidget(sistcoord_label, 0, 0)
+        layout.addWidget(self.radio_joint, 0, 1)
+        layout.addWidget(self.radio_cartesian, 0, 2)
+
         # Headers: 
-        init_label = QLabel("Inicial")              # (Linha 0): " " | "Inicial" | "Final"
+        init_label = QLabel("Inicial")                      # (Linha 0): " " | "Inicial" | "Final"
         final_label = QLabel("Final")
-        layout.addWidget(init_label, 0, 1)
-        layout.addWidget(final_label, 0, 2)
+        layout.addWidget(init_label, 1, 1)
+        layout.addWidget(final_label, 1, 2)
         
         # Linhas das juntas: 
-        q1_label = QLabel("q1 [deg]:")                # (Linha 1): "q1 [deg]:" | [entrada: initial_q1] | [entrada: final_q1]
-        layout.addWidget(q1_label, 1, 0)
-        layout.addWidget(self.initial_q1, 1, 1)
-        layout.addWidget(self.final_q1, 1, 2)
+        self.q1_label = QLabel("q1 [deg]:")                 # (Linha 1): "q1 [deg]:" | [entrada: initial_q1] | [entrada: final_q1]
+        layout.addWidget(self.q1_label, 2, 0)
+        layout.addWidget(self.initial_q1, 2, 1)
+        layout.addWidget(self.final_q1, 2, 2)
 
-        q2_label = QLabel("q2 [deg]:")                # (Linha 2): "q2 [deg]:" | [entrada: initial_q2] | [entrada: final_q2]
-        layout.addWidget(q2_label, 2, 0)
-        layout.addWidget(self.initial_q2, 2, 1)
-        layout.addWidget(self.final_q2, 2, 2)
+        self.q2_label = QLabel("q2 [deg]:")                 # (Linha 2): "q2 [deg]:" | [entrada: initial_q2] | [entrada: final_q2]
+        layout.addWidget(self.q2_label, 3, 0)
+        layout.addWidget(self.initial_q2, 3, 1)
+        layout.addWidget(self.final_q2, 3, 2)
 
-        d3_label = QLabel("d3 [cm]:")               # (Linha 3): "d3 [cm]:" | [entrada: initial_q3] | [entrada: final_q3]
-        layout.addWidget(d3_label, 3, 0)
-        layout.addWidget(self.initial_d3, 3, 1)
-        layout.addWidget(self.final_d3, 3, 2)
+        self.d3_label = QLabel("d3 [cm]:")                  # (Linha 3): "d3 [cm]:" | [entrada: initial_q3] | [entrada: final_q3]
+        layout.addWidget(self.d3_label, 4, 0)
+        layout.addWidget(self.initial_d3, 4, 1)
+        layout.addWidget(self.final_d3, 4, 2)
         
         return group
-    
+        
     """--------------------------- 1.2) Painel de Controle -> Campo de Trajetória ---------------------------"""
     def create_trajectory_group(self):
         """Parâmetros de trajetória"""
@@ -229,24 +246,36 @@ class RobotControlInterface(QMainWindow):
         double_validator.setBottom(1)
 
         # Campos de entrada: Duração e dt
-        self.duration = QLineEdit("5.0")        # Duração
-        self.dt = QLineEdit("50")               # Dt
+        self.duration_field = QLineEdit("5.0")        # Duração
+        self.dt_field = QLineEdit("50")               # Dt
         # Validador
-        self.duration.setValidator(double_validator)
-        self.dt.setValidator(double_validator)
+        self.duration_field.setValidator(double_validator)
+        self.dt_field.setValidator(double_validator)
         # Altura
-        self.duration.setMaximumHeight(35)
-        self.dt.setMaximumHeight(35)
+        self.duration_field.setMaximumHeight(35)
+        self.dt_field.setMaximumHeight(35)
                 
         # Adicionar os Widgets
         dur_label = QLabel("Duração [s]:")              # (Linha 0): "Duração [s] | [entrada: duration]"
         layout.addWidget(dur_label, 0, 0)
-        layout.addWidget(self.duration, 0, 1)
+        layout.addWidget(self.duration_field, 0, 1)
 
         dt_label = QLabel("dt [ms]:")                   # (Linha 1): "dt [ms] | [entrada: dt]"
         layout.addWidget(dt_label, 1, 0)
-        layout.addWidget(self.dt, 1, 1)
-        
+        layout.addWidget(self.dt_field, 1, 1)
+
+        self.btn_calc_trajectory = QPushButton("Calcular Trajetória")
+        button_style = """
+            QPushButton {
+                padding: 4px 8px;
+                font-size: 11px;
+                min-height: 20px;
+                max-height: 25px;
+            }
+        """
+        self.btn_calc_trajectory.setStyleSheet(button_style)
+        layout.addWidget(self.btn_calc_trajectory, 2, 1)
+
         return group
     
     """--------------------------- 1.3) Painel de Controle -> Campo de Simulação ---------------------------"""
@@ -285,10 +314,10 @@ class RobotControlInterface(QMainWindow):
         layout.addWidget(self.progress_bar)
         
         # Botões                                                # (Linhas 3-6): Botões ("trajetória", "simular", "parar", "robô")
-        self.btn_calc_trajectory = QPushButton("Calcular Trajetória")
+        # self.btn_calc_trajectory = QPushButton("Calcular Trajetória")
         self.btn_simulate = QPushButton("Simular")
-        self.btn_stop = QPushButton("Parar")
-        self.btn_send_robot = QPushButton("Enviar para Robô")
+        self.btn_stop = QPushButton("Pausar")
+        # self.btn_clear_interface = QPushButton("Limpar interface")
         # Adotar o estilo do botão
         button_style = """
             QPushButton {
@@ -298,18 +327,19 @@ class RobotControlInterface(QMainWindow):
                 max-height: 25px;
             }
         """
-        self.btn_calc_trajectory.setStyleSheet(button_style)
+        # self.btn_calc_trajectory.setStyleSheet(button_style)
         self.btn_simulate.setStyleSheet(button_style)
         self.btn_stop.setStyleSheet(button_style)
-        self.btn_send_robot.setStyleSheet(button_style)
+        # self.btn_clear_interface.setStyleSheet(button_style)
         # Alguns botões são desabilitados inicialmente
         self.btn_stop.setEnabled(False)
         self.btn_simulate.setEnabled(False)
+        # self.btn_clear_interface.setEnabled(True)
         # Adiciona os Widgets
-        layout.addWidget(self.btn_calc_trajectory)
+        # layout.addWidget(self.btn_calc_trajectory)
         layout.addWidget(self.btn_simulate)
         layout.addWidget(self.btn_stop)
-        layout.addWidget(self.btn_send_robot)
+        # layout.addWidget(self.btn_clear_interface)
         
         return group
     
@@ -369,11 +399,32 @@ class RobotControlInterface(QMainWindow):
         try:
             # Quando os botões são apertados, as funções são acionadas
             self.btn_calc_trajectory.clicked.connect(self.calculate_trajectory)
-            self.btn_simulate.clicked.connect(self.start_simulation)
-            self.btn_stop.clicked.connect(self.stop_simulation)
-            self.btn_send_robot.clicked.connect(self.send_to_robot)
+            self.btn_simulate.clicked.connect(self.start_stop_simulation)
+            self.btn_stop.clicked.connect(self.pause_resume_simulation)
+            # self.btn_clear_interface.clicked.connect(self.update_clear_interface)
             self.speed_slider.valueChanged.connect(self.update_speed)
             self.use_controller.clicked.connect(self.update_controller)
+            self.radio_joint.toggled.connect(self.update_position_labels)
+
+            # Entradas dados: Atualização dos dados (tempo real): textChanged
+            self.initial_q1.textChanged.connect(self.update_coordenate_system)
+            self.initial_q2.textChanged.connect(self.update_coordenate_system)
+            self.initial_d3.textChanged.connect(self.update_coordenate_system)
+            self.final_q1.textChanged.connect(self.update_coordenate_system)
+            self.final_q2.textChanged.connect(self.update_coordenate_system)
+            self.final_d3.textChanged.connect(self.update_coordenate_system)
+            self.duration_field.textChanged.connect(self.update_trajectory_params)
+            self.dt_field.textChanged.connect(self.update_trajectory_params)
+
+            # Entradas dados: Atualização dos dados (tempo real): editingFinished
+            self.initial_q1.editingFinished.connect(self.validate_inputs)
+            self.initial_q2.editingFinished.connect(self.validate_inputs)
+            self.initial_d3.editingFinished.connect(self.validate_inputs)
+            self.final_q1.editingFinished.connect(self.validate_inputs)
+            self.final_q2.editingFinished.connect(self.validate_inputs)
+            self.final_d3.editingFinished.connect(self.validate_inputs)
+            self.duration_field.editingFinished.connect(self.validate_inputs)
+            self.dt_field.editingFinished.connect(self.validate_inputs)
             
             # Conecta com a Thread de simulation_thread.py
             # Quando os sinais chegam, as funções de update são acionadas
@@ -386,6 +437,126 @@ class RobotControlInterface(QMainWindow):
     
     """
     =================================================================================================================
+                                                0) Funções Auxiliares
+    =================================================================================================================
+    """
+
+    """--------------------------- Leitura de dados: Juntas ---------------------------"""
+    def read_joints(self):
+        q0 = np.array([
+            np.deg2rad(float(self.initial_q1.text())),
+            np.deg2rad(float(self.initial_q2.text())),
+            float(self.initial_d3.text())/100.0
+        ])
+        qf = np.array([
+            np.deg2rad(float(self.final_q1.text())),
+            np.deg2rad(float(self.final_q2.text())),
+            float(self.final_d3.text())/100.0
+        ])
+        return q0, qf
+    
+    """--------------------------- Leitura de dados: Cartesiano ---------------------------"""
+    def read_cartesian(self):
+        pos0 = np.array([
+            float(self.initial_q1.text()),
+            float(self.initial_q2.text()),
+            float(self.initial_d3.text())
+        ])
+        posf = np.array([
+            float(self.final_q1.text()),
+            float(self.final_q2.text()),
+            float(self.final_d3.text())
+        ])
+        return pos0, posf
+
+    """--------------------------- Validação inicial ---------------------------"""
+    def initial_validation(self):
+        """Validação entradas nulas e não numéricas"""
+        fields = [
+            (self.initial_q1, "q1 inicial"), (self.initial_q2, "q2 inicial"), (self.initial_d3, "d3 inicial"),
+            (self.final_q1, "q1 final"), (self.final_q2, "q2 final"), (self.final_d3, "d3 final"),
+            (self.duration_field, "duração"), (self.dt_field, "dt")
+        ]
+        
+        for field, name in fields:
+            if not field.text().strip():                                                # Validação: entradas nulas
+                QMessageBox.warning(self, "Campo Vazio", f"Preencha '{name}'")
+                field.setFocus()
+                return False
+            
+            try:                                                                        # Validação: não numéricos
+                float(field.text())
+            except ValueError:
+                QMessageBox.warning(self, "Valor Inválido", f"'{name}' deve ser numérico")
+                field.setFocus()
+                return False
+        
+        return True
+
+    """--------------------------- Validação dos limites operacionais ---------------------------"""
+    def validate_inputs(self, noWarning=False):
+        """Validação dos limites operacionais"""
+        try:
+            tf, dt = self.tf, self.dt
+            q1_initial, q2_initial, d3_initial = self.q0
+            q1_final, q2_final, d3_final = self.qf
+
+
+            # Limites físicos
+            d3_max = self.robot.d3_max
+            q1_min, q1_max = self.robot.J1_range
+            q2_min, q2_max = self.robot.J2_range
+
+            # [Validação]: (duração, dt)                        # [Validação]: Duração [(Duration > 0)], Dt [(0 < dt < duração)]
+            if tf <= 0:
+                QMessageBox.warning(self, "Valor Inválido", "Duração > 0")
+                self.duration_field.setFocus()
+                return False
+                
+            if dt <= 0 or dt >= tf:
+                QMessageBox.warning(self, "Valor Inválido", "0 < dt < duração")
+                self.dt_field.setFocus()
+                return False
+
+            # [Validação]: (q1, q2, d3):                        # [Validação]: D3 [(0 < D3 < DR_MAX)], Qi [(RANGE_MIN <= q <= RANGE_MAX)] 
+            if q1_initial < q1_min or q1_initial > q1_max:
+                if not noWarning: QMessageBox.warning(self, "Limite Físico", f"q1 inicial: {np.rad2deg(q1_min)} a {np.rad2deg(q1_max)} graus")
+                self.initial_q1.setFocus()
+                return False
+            
+            if q1_final < q1_min or q1_final > q1_max:
+                if not noWarning: QMessageBox.warning(self, "Limite Físico", f"q1 final: {np.rad2deg(q1_min)} a {np.rad2deg(q1_max)} graus")
+                self.final_q1.setFocus()
+                return False
+            
+            if q2_initial < q2_min or q2_initial > q2_max:
+                if not noWarning: QMessageBox.warning(self, "Limite Físico", f"q2 inicial: {np.rad2deg(q2_min)} a {np.rad2deg(q2_max)} graus")
+                self.initial_q2.setFocus()
+                return False
+            
+            if q2_final < q2_min or q2_final > q2_max:
+                if not noWarning: QMessageBox.warning(self, "Limite Físico", f"q2 final: {np.rad2deg(q2_min)} a {np.rad2deg(q2_max)} graus")
+                self.final_q2.setFocus()
+                return False
+            
+            if d3_initial < 0 or d3_initial > d3_max:
+                if not noWarning: QMessageBox.warning(self, "Limite Físico", f"d3 inicial: 0.00 a {100*d3_max:.2f} cm")
+                self.initial_d3.setFocus()
+                return False
+                
+            if d3_final < 0 or d3_final > d3_max:
+                if not noWarning: QMessageBox.warning(self, "Limite Físico", f"d3 final: 0.00 a {100*d3_max:.2f} cm")
+                self.final_d3.setFocus()
+                return False
+
+            return True
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erro de Validação", str(e))
+            return False
+    
+    """
+    =================================================================================================================
                                                 1) Funções de Controle
     =================================================================================================================
     """
@@ -394,28 +565,11 @@ class RobotControlInterface(QMainWindow):
     def calculate_trajectory(self):
         """Calcular trajetória"""
         try:
-            # Validação de Inputs/Entradas
             if not self.validate_inputs():
                 return
             
-            # [Leitura de dados]: Painel de Controle -> Campo de Posição (q_0 e q_f)
-            q0 = np.array([
-                np.deg2rad(float(self.initial_q1.text())),
-                np.deg2rad(float(self.initial_q2.text())),
-                float(self.initial_d3.text()) / 100
-            ])
-            qf = np.array([
-                np.deg2rad(float(self.final_q1.text())),
-                np.deg2rad(float(self.final_q2.text())),
-                float(self.final_d3.text()) / 100
-            ])
-            
-            # [Leitura de dados]: Painel de Controle -> Campo de Trajetória (Duração e Dt)
-            tf = float(self.duration.text())
-            dt = float(self.dt.text()) / 1000
-            
             # Gera a Trajetória: trajectory = [(t, q_t, qd_t, qdd_t), (...)]
-            self.trajectory = self.trajectory_gen.generate_trajectory(q0, qf, tf, dt)
+            self.trajectory = self.trajectory_gen.generate_trajectory(self.q0, self.qf, self.tf, self.dt)
             
             # Calcula todas as posições (x,y,z)
             trajectory_points = []
@@ -425,101 +579,34 @@ class RobotControlInterface(QMainWindow):
 
             # [Update plot]: posiciona o robô, adiciona a Trajetória Completa e a Posição Final nos plots
             if hasattr(self, 'robot_plot'):
-                self.robot_plot.update_robot_position(*q0)                          # Posiciona o robô com q0
+                # self.robot_plot.update_robot_position(*self.q0)                     # Posiciona o robô com q0
                 self.robot_plot.reset_position_graph()                              # Reseta o plot q(t)
-                self.robot_plot.set_trajectory(self.trajectory, trajectory_points)  # Adiciona a Trajetória Completa    ([Adicionar a trajetória no plot q(t)])
-                x_final, y_final, z_final = self.robot.forward_kinematics(*qf)
-                self.robot_plot.set_target_position(x_final, y_final, z_final)      # Adiciona a Posição Final
+                self.robot_plot.reset_positioning_lines()
+                self.robot_plot.set_trajectory(self.trajectory, trajectory_points)  # Adiciona a Trajetória Completa
+                self.robot_plot.set_target_position(*self.posf)                     # Adiciona a Posição Final
             
             # Ativa o Botão de "Simular"
             self.btn_simulate.setEnabled(True)
+            # self.btn_clear_interface.setEnabled(False)
             # Adiciona status no log
-            self.update_status(f"Trajetória: {len(self.trajectory)} pts, {tf}s")
+            self.update_status(f"Trajetória: {len(self.trajectory)} pts, {self.tf}s")
             
         except ValueError as e:
             QMessageBox.warning(self, "Entrada Inválida", f"Verifique os valores: {str(e)}")
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao calcular trajetória: {str(e)}")
     
-    """--------------------------- 1.2) Funções de Controle -> Valida Inputs ---------------------------"""
-    def validate_inputs(self):
-        """Validar entradas"""
-        try:
-            fields = [
-                (self.initial_q1, "q1 inicial"), (self.initial_q2, "q2 inicial"), (self.initial_d3, "d3 inicial"),
-                (self.final_q1, "q1 final"), (self.final_q2, "q2 final"), (self.final_d3, "d3 final"),
-                (self.duration, "duração"), (self.dt, "dt")
-            ]
-            
-            for field, name in fields:
-                if not field.text().strip():                                                # Validação: entradas nulas
-                    QMessageBox.warning(self, "Campo Vazio", f"Preencha '{name}'")
-                    field.setFocus()
-                    return False
-                
-                try:                                                                        # Validação: não numéricos
-                    float(field.text())
-                except ValueError:
-                    QMessageBox.warning(self, "Valor Inválido", f"'{name}' deve ser numérico")
-                    field.setFocus()
-                    return False
-            
-            # D3: limitante (deve estar dentro dos limites)                     # [Validação 1]: D3 [(0 < D3 < DR_MAX)]
-            d3_initial = float(self.initial_d3.text())
-            d3_final = float(self.final_d3.text())
-            d3_max = 100*self.robot.d3_max
-            
-            if d3_initial < 0 or d3_initial > d3_max:
-                QMessageBox.warning(self, "Limite Físico", f"d3 inicial: 0.0 a {d3_max} cm")
-                return False
-                
-            if d3_final < 0 or d3_final > d3_max:
-                QMessageBox.warning(self, "Limite Físico", f"d3 final: 0.0 a {d3_max} cm")
-                return False
-            
-            # Duração: limitante (deve estar dentro dos limites)                # [Validação 2]: Duração e Dt [(Duration > 0) & (0 < dt < duração)]
-            duration = float(self.duration.text())
-            dt = float(self.dt.text()) / 1000
-            
-            if duration <= 0:
-                QMessageBox.warning(self, "Valor Inválido", "Duração > 0")
-                return False
-                
-            if dt <= 0 or dt >= duration:
-                QMessageBox.warning(self, "Valor Inválido", "0 < dt < duração")
-                return False
-            
-            # Posições: limitante (deve estar dentro dos limites)               # [Validação 3]: posição das juntas q_i [RANGE_MIN <= q <= RANGE_MAX] 
-            q1_initial = float(self.initial_q1.text())
-            q2_initial = float(self.initial_q2.text())
-            q1_final = float(self.final_q1.text())
-            q2_final = float(self.final_q2.text())
-            q1_min, q1_max = np.rad2deg(np.array(self.robot.J1_range, float))
-            q2_min, q2_max = np.rad2deg(np.array(self.robot.J2_range, float))
+    """--------------------------- 1.2) Funções de Controle -> Começar/Cancelar Simulação ---------------------------"""
+    def start_stop_simulation(self):
+        if self.btn_simulate.text() == "Simular":
+            self.start_simulation()
+            self.btn_simulate.setText("Cancelar")
+        elif self.btn_simulate.text() == "Cancelar":
+            self.stop_simulation()
+            self.btn_simulate.setText("Simular")
+            self.btn_stop.setText("Pausar")
 
-            if q1_initial < q1_min or q1_initial > q1_max:
-                QMessageBox.warning(self, "Limite Físico", f"q1 inicial: {q1_min} a {q1_max} graus")
-                return False
-            
-            if q1_final < q1_min or q1_final > q1_max:
-                QMessageBox.warning(self, "Limite Físico", f"q1 final: {q1_min} a {q1_max} graus")
-                return False
-            
-            if q2_initial < q2_min or q2_initial > q2_max:
-                QMessageBox.warning(self, "Limite Físico", f"q2 inicial: {q2_min} a {q2_max} graus")
-                return False
-            
-            if q2_final < q2_min or q2_final > q2_max:
-                QMessageBox.warning(self, "Limite Físico", f"q2 final: {q2_min} a {q2_max} graus")
-                return False
-
-            return True
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Erro de Validação", str(e))
-            return False
-    
-    """--------------------------- 1.3) Funções de Controle -> Start Simulação ---------------------------"""
+    """--------------------------- 1.3) Funções de Controle -> Começar Simulação ---------------------------"""
     def start_simulation(self):
         """Iniciar simulação"""
         try:
@@ -529,61 +616,102 @@ class RobotControlInterface(QMainWindow):
             
             if hasattr(self, 'robot_plot'):
                 self.robot_plot.reset_position_graph()
+                self.robot_plot.reset_positioning_lines()
             
             # Passa a trajetória e o controle para o thread                 # Configuração da Simulation_Thread
             self.simulation_thread.set_trajectory(self.trajectory)
             
             # Ativa/desativa os botões
-            self.btn_simulate.setEnabled(False)
-            self.btn_stop.setEnabled(True)
-            self.btn_calc_trajectory.setEnabled(False)
-            self.progress_bar.setVisible(True)
-            self.progress_bar.setValue(0)
+            self.enable_simulation_buttons(True)
             
             # Inicia a simulação na thread                                  # Início da Simulation_Thread
             self.simulation_thread.start()
             
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao iniciar simulação: {str(e)}")
-            self.reset_simulation_buttons()
+            self.enable_simulation_buttons(False)
     
-    """--------------------------- 1.4) Funções de Controle -> Stop Simulação ---------------------------"""
+    """--------------------------- 1.4) Funções de Controle -> Cancelar Simulação ---------------------------"""
     def stop_simulation(self):
         """Parar simulação"""
         try:
             self.simulation_thread.stop()                                   # Cancelamento da Simulation_Thread
             self.simulation_thread.wait(1000)
             self.update_status("Simulação parada")
-            self.reset_simulation_buttons()
+            self.robot_plot.update_robot_position(*self.q0)              # Voltar o robô pra posição inicial
+            self.robot_plot.reset_position_graph()
+            self.robot_plot.reset_trajectory()                              # Tirar as linhas de trajetória
+            self.robot_plot.set_xy_pos(self.pos0, self.posf)
+            self.robot_plot.set_rz_pos(self.pos0, self.posf)
+            self.robot_plot.set_target_position(*self.posf)
+            self.trajectory = None
+            self.enable_simulation_buttons(False)
 
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao parar simulação: {str(e)}")
     
-    """--------------------------- 1.5) Funções de Controle -> Reset Botões ---------------------------"""
-    def reset_simulation_buttons(self):
-        """Resetar botões após simulação"""
-        self.btn_simulate.setEnabled(True if hasattr(self, 'trajectory') and self.trajectory else False)
-        self.btn_stop.setEnabled(False)
-        self.btn_calc_trajectory.setEnabled(True)
-        self.progress_bar.setVisible(False)
-    
-    """--------------------------- 1.6) Funções de Controle -> Enviar para Robô ---------------------------"""
-    def send_to_robot(self):
-        """Enviar para robô"""
-        # Ainda não faz nada. Só printa mensagem.
+    """--------------------------- 1.5) Funções de Controle -> Pausar/Retomar Simulação ---------------------------"""
+    def pause_resume_simulation(self):
+        action = self.btn_stop.text()
+
         try:
-            if not hasattr(self, 'trajectory') or not self.trajectory:
-                QMessageBox.warning(self, "Aviso", "Calcule trajetória primeiro!")
-                return
-            
-            self.update_status("Preparando envio...")
-            QMessageBox.information(self, "Sucesso", "Trajetória enviada!")
-            self.update_status("Enviado via Bluetooth")
-            
+            if action == "Pausar":                                          # Pausar simulação
+                self.simulation_thread.pause()
+                QTimer.singleShot(50, lambda: self.update_status("Simulação pausada"))
+                self.btn_stop.setText("Retomar")
+                
+            elif action == "Retomar":                                       # Retomar simulação
+                self.update_status("Simulação retomada")
+                self.simulation_thread.resume()
+                self.btn_stop.setText("Pausar")
+
         except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro ao enviar: {str(e)}")
+            QMessageBox.critical(self, "Erro", f"Erro ao {action.lower()} simulação: {str(e)}")
     
-    """--------------------------- 1.7) Funções de Controle -> Atualizar Velocidade de simulação ---------------------------"""
+    """--------------------------- 1.6) Funções de Controle -> (Des)Habilita Botões ---------------------------"""
+    def enable_simulation_buttons(self, enable):
+            has_trajectory = True if hasattr(self, 'trajectory') and self.trajectory else False
+            if not enable: self.btn_simulate.setEnabled(has_trajectory)
+            self.btn_stop.setEnabled(enable)
+            self.btn_calc_trajectory.setEnabled(not enable)
+            self.progress_bar.setVisible(enable)
+            if enable: self.progress_bar.setValue(0)
+            # self.btn_clear_interface.setEnabled(not enable)
+            self.radio_joint.setEnabled(not enable)
+            self.radio_cartesian.setEnabled(not enable)
+            self.enable_position_buttons(not enable)
+
+    """--------------------------- 1.6.1) Funções de Controle -> (Des)Habilita Botões de Posição ---------------------------"""
+    def enable_position_buttons(self, enable):
+        self.initial_q1.setEnabled(enable)
+        self.initial_q2.setEnabled(enable)
+        self.initial_d3.setEnabled(enable)
+        self.final_q1.setEnabled(enable)
+        self.final_q2.setEnabled(enable)
+        self.final_d3.setEnabled(enable)
+    
+    """--------------------------- 1.7) Funções de Controle -> Limpar Interface ---------------------------"""
+    def clear_interface(self):
+        """Limpa a interface"""
+        try:
+            self.robot_plot.update_robot_position(*self.q0) # Voltar o robô pra posição inicial
+            self.robot_plot.reset_position_graph()
+            self.robot_plot.reset_trajectory()  
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro ao limpar a interface: {str(e)}")
+    
+    """
+    =================================================================================================================
+                                                2) Funções de Update (Tempo real)
+    =================================================================================================================
+    """
+
+    """--------------------------- Limpar Interface ---------------------------"""
+    def update_clear_interface(self):
+        self.clear_interface()
+        self.update_status("Interface resetada")
+
+    """--------------------------- Atualizar Velocidade de simulação ---------------------------"""
     def update_speed(self, value):
         """Atualizar velocidade: altera o tempo de sleep() de atualização dos plots"""
         try:
@@ -593,7 +721,7 @@ class RobotControlInterface(QMainWindow):
         except Exception as e:
             print(f"Erro ao atualizar velocidade: {e}")
     
-    """--------------------------- 1.8) Funções de Controle -> Atualizar Controlador ---------------------------"""
+    """--------------------------- Atualizar Controlador ---------------------------"""
     def update_controller(self, checked):
         try:
             if checked:
@@ -605,15 +733,9 @@ class RobotControlInterface(QMainWindow):
         except Exception as e:
             print(f"Erro ao atualizar controlador: {e}")
     
-    """
-    =================================================================================================================
-                                                2) Funções de Update (Tempo real)
-    =================================================================================================================
-    """
-
     """--------------------------- 2.1) Funções de Update -> Posição e Trajetória das juntas ---------------------------"""
-    def update_robot_position(self, t, q1, q2, d3):                             # [sinal]: <- simulation_thread.position_updated
-        """Atualizar gráficos de posição"""
+    def update_robot_position(self, t, q1, q2, d3):
+        """Atualizar gráficos de posição"""                                     # [sinal]: <- simulation_thread.position_updated
         try:
             if hasattr(self, 'robot_plot'):
                 self.robot_plot.update_robot_position(q1, q2, d3)               # [update]: -> robot_plot.update_robot_position() [plot: 3d, xy, rz]
@@ -640,9 +762,103 @@ class RobotControlInterface(QMainWindow):
         try:
             self.progress_bar.setValue(value)                                   # [update]: -> progress_bar.setValue(value) [atualiza a barra de progresso]
             if value >= 100:
-                QTimer.singleShot(1000, self.reset_simulation_buttons)
+                self.btn_simulate.setText("Simular")
+                QTimer.singleShot(1000, lambda: self.enable_simulation_buttons(False))
         except Exception as e:
             print(f"Erro ao atualizar progresso: {e}")
+    
+        """--------------------------- Em construção (!!!!) ---------------------------"""
+    
+    """--------------------------- Transformação de Coordenadas: juntas/cartesiano ---------------------------"""
+    def update_coordenate_system(self):
+        try:
+            if not self.initial_validation():
+                return None
+            
+            # 1. Transformação: cartesian -> joints
+            if self.radio_joint.isChecked():
+                self.q0, self.qf = self.read_joints()
+                self.pos0 = self.robot.forward_kinematics(*self.q0)
+                self.posf = self.robot.forward_kinematics(*self.qf)
+
+            # 2. Transformação: joints -> cartesian
+            elif self.radio_cartesian.isChecked():
+                self.pos0, self.posf = self.read_cartesian()
+                self.q0 = self.robot.inverse_kinematics(*self.pos0)
+                self.qf = self.robot.inverse_kinematics(*self.posf)
+
+            # Limpa a interface
+            self.clear_interface()
+            self.robot_plot.set_target_position(*self.posf)
+            
+            # Adicionar plot    (já resolve para resultados inválidos: não plota)
+            self.robot_plot.set_xy_pos(self.pos0, self.posf)
+            self.robot_plot.set_rz_pos(self.pos0, self.posf)            
+        
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro na transformação do sistema de coordenada: {str(e)}")
+    
+    """--------------------------- Parâmetros da Trajetória ---------------------------"""
+    def update_trajectory_params(self):
+        try:
+            self.tf = float(self.duration_field.text())
+            self.dt = float(self.dt_field.text()) / 1000
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro na configuração da trajetória: {str(e)}")
+    
+    """--------------------------- Label do Campo de Posição ---------------------------"""
+    def update_position_labels(self):
+        """Mudança de sistema de coordenadas"""
+        with QSignalBlocker(self.initial_q1), QSignalBlocker(self.initial_q2), \
+            QSignalBlocker(self.initial_d3), QSignalBlocker(self.final_q1), \
+            QSignalBlocker(self.final_q2), QSignalBlocker(self.final_d3):
+
+            if self.radio_joint.isChecked():
+                self.update_status("Transformação: cartesiano -> juntas")
+                print("Cartesian -> Joint")
+                self.q1_label.setText("q1 [deg]:")
+                self.q2_label.setText("q2 [deg]:")
+                self.d3_label.setText("d3 [cm]:")
+                self.set_transformed_inputs()
+            elif self.radio_cartesian.isChecked():
+                self.update_status("Transformação: juntas -> cartesiano")
+                print("Joint -> Cartesian")
+                self.q1_label.setText("x [m]:")
+                self.q2_label.setText("y [m]:")
+                self.d3_label.setText("z [m]:")
+                self.set_transformed_inputs()
+        
+        self.update_coordenate_system()
+
+        print("q0:\t", np.round([np.rad2deg(self.q0[0]), np.rad2deg(self.q0[1]), 100*self.q0[2]], 2))
+        print("qf:\t", np.round([np.rad2deg(self.qf[0]), np.rad2deg(self.qf[1]), 100*self.qf[2]], 2))
+        print("pos0:\t", np.round(self.pos0, 2))
+        print("posf:\t", np.round(self.pos0, 2))
+    
+    """--------------------------- Setar dados no Campo de Posição ---------------------------"""
+    def set_transformed_inputs(self):
+        try:
+            if self.radio_joint.isChecked():
+                data0 = [np.rad2deg(self.q0[0]), np.rad2deg(self.q0[1]), 100*self.q0[2]]    # (q1,q2,d3) -> [deg, deg, cm]
+                dataf = [np.rad2deg(self.qf[0]), np.rad2deg(self.qf[1]), 100*self.qf[2]]
+            elif self.radio_cartesian.isChecked():
+                data0 = self.pos0
+                dataf = self.posf
+            
+            # Formatação
+            data0 = np.round(data0, 2)
+            dataf = np.round(dataf, 2)
+            
+            # Alocação dos dados
+            self.initial_q1.setText(str((data0[0])))
+            self.initial_q2.setText(str(data0[1]))
+            self.initial_d3.setText(str(data0[2]))
+            self.final_q1.setText(str(dataf[0]))
+            self.final_q2.setText(str(dataf[1]))
+            self.final_d3.setText(str(dataf[2]))
+
+        except Exception as e:
+            self.update_status(f"Erro ao alterar o sistema de coordenadas: {str(e)}")
     
     """
     =================================================================================================================

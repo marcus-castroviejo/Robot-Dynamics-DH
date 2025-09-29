@@ -36,12 +36,19 @@ class RobotParameters:
     
     """--------------------------- Tabela Denavit-Hartenberg (DH) ---------------------------"""
     q1, q2, q3 = symbols('q_1:4')
+    # DH_TABLE = Matrix([
+    #     # theta     d           a       alpha
+    #     [ q1,       L1,         0,       pi/2],     # Junta 1
+    #     [ q2,       0,          0,       pi/2],     # Junta 2
+    #     [ pi/2,     q3+L2,      0,       0   ]      # Junta 3
+    # ])
+
+    # Nova versão
     DH_TABLE = Matrix([
         # theta     d           a       alpha
-        [ q1,       L1,         0,       pi/2],     # Junta 1
-        [ q2,       0,          0,       pi/2],     # Junta 2
-        [ pi/2,     q3+L2,      0,       0   ]      # Junta 3
+        [ q1+pi,    L1,         0,      -pi/2 ],    # Junta 1
+        [ q2,       0,          0,      -pi/2 ],    # Junta 2
+        [ 0,        q3+L2,      0,      0     ]     # Junta 3
     ])
-
     """--------------------------- Constantes físicas ---------------------------"""
     GRAVITY = 9.81
