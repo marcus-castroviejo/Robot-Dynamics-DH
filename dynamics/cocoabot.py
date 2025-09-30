@@ -28,6 +28,7 @@ class CocoaBot:
         # Parâmetros do robô RRP
         self.setup_robot()
         self.setup_full_robot()
+        self.get_cartesian_ranges()
     
     """--------------------------- Parâmetros Numéricos ---------------------------"""
     def setup_robot(self):
@@ -91,6 +92,54 @@ class CocoaBot:
         G = r.eval_matrix(r.gravity_vector, q=q)
         return M, C, G
 
+    """--------------------------- Limites de movimentação do robô ---------------------------"""
+    def get_cartesian_ranges(self):
+        # Ranges de movimentação
+        q1 = np.linspace(*self.J1_range, 100)
+        q2 = np.linspace(*self.J2_range, 100)
+
+        # Hipotenusa mínima e máxima (Elo 2)
+        h_min = self.L2
+        h_max = self.L2 + self.d3_max
+        
+        # Coordenada radial e coordenada Z
+        self.r_inner = np.array(h_min * np.sin(q2))
+        self.r_outer = np.array(h_max * np.sin(q2))
+        self.z_inner = np.array(self.L1 - h_min * np.cos(q2))
+        self.z_outer = np.array(self.L1 - h_max * np.cos(q2))
+
+        # Alcance radial mínimo e máximo no plano XY
+        self.r_min = np.min(self.r_inner)
+        self.r_max = np.max(self.r_outer)
+
+        # Coordenas X e Y
+        self.x_inner = self.r_min * np.cos(q1)
+        self.x_outer = self.r_max * np.cos(q1)
+        self.y_inner = self.r_min * np.sin(q1)
+        self.y_outer = self.r_max * np.sin(q1)
+
+    """--------------------------- Range de Z em função de R ---------------------------"""
+    def calc_Zrange(self, r):
+        # Range de movimentação: q2
+        q2 = np.linspace(*self.J2_range, 100)
+        sin_q2 = np.sin(q2)
+
+        # Validação numérica
+        valid_sin = np.abs(sin_q2) > 1e-6
+        
+        # D3, dados r e q2
+        d3 = np.where(valid_sin, r / sin_q2 - self.L2, np.inf)
+        
+        # Validação limites físicos
+        valid = valid_sin & (d3 >= 0) & (d3 <= self.d3_max)
+        if not np.any(valid):
+            return None, None
+        
+        # Range de Z
+        z = self.L1 - (self.L2 + d3[valid]) * np.cos(q2[valid])
+        z_min = np.min(z)
+        z_max = np.max(z)
+        return z_min, z_max
 
     """--------------------------- Inverse Kinematics: cartesiano -> juntas ---------------------------"""
     def inverse_kinematics(self, target_x, target_y, target_z):

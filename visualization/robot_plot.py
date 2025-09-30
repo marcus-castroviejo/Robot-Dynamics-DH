@@ -114,6 +114,11 @@ class RobotPlot(FigureCanvas):
         self.robot_line_xy, = self.ax_xy.plot([], [], 'b-o', linewidth=3, markersize=8, label='Robô')
         self.robot_line_rz, = self.ax_rz.plot([], [], 'b-o', linewidth=3, markersize=8, label='Robô')
         
+        # Target (ponto verde)
+        self.target_3d, = self.ax_3d.plot([], [], [], 'go', markersize=8, label='Alvo')
+        self.target_xy, = self.ax_xy.plot([], [], 'go', markersize=8, label='Alvo')
+        self.target_rz, = self.ax_rz.plot([], [], 'go', markersize=8, label='Alvo')
+
         # Trajetória (linha preta pontilhada)
         self.traj_line_3d, = self.ax_3d.plot([], [], [], 'k:', alpha=0.7, label='Trajetória')
         self.traj_line_xy, = self.ax_xy.plot([], [], 'k:', alpha=0.7, label='Trajetória')
@@ -123,11 +128,6 @@ class RobotPlot(FigureCanvas):
         self.traj_line_q1, = self.ax_position.plot([], [], 'b:', alpha=0.7, label='$q_1^{ref}(t)$ [deg]')
         self.traj_line_q2, = self.ax_position.plot([], [], 'r:', alpha=0.7, label='$q_2^{ref}(t)$ [deg]')
         self.traj_line_q3, = self.ax_position.plot([], [], 'g:', alpha=0.7, label='$q_3^{ref}(t)$ [mm]')
-        
-        # Target (ponto verde)
-        self.target_3d, = self.ax_3d.plot([], [], [], 'go', markersize=8, label='Alvo')
-        self.target_xy, = self.ax_xy.plot([], [], 'go', markersize=8, label='Alvo')
-        self.target_rz, = self.ax_rz.plot([], [], 'go', markersize=8, label='Alvo')
         
         # Linhas do Plot das Juntas
         self.q1_line, = self.ax_position.plot([], [], 'b-', linewidth=2, label='$q_1(t)$ [deg]')
@@ -157,28 +157,11 @@ class RobotPlot(FigureCanvas):
     def plot_workspace_views(self):
         """Plotar workspace do robô"""
         try:
-            # Dimensões e limites de movimentação
-            L1 = self.robot.L1
-            L2 = self.robot.L2
-            q1_range = self.robot.J1_range
-            q2_range = self.robot.J2_range
-            d3_max = self.robot.d3_max
-
-            # Ranges de movimentação
-            q1 = np.linspace(*q1_range, 100)
-            q2 = np.linspace(*q2_range, 100)
-
-            # Hipotenusa mínima e máxima (Elo 2)
-            h_min = L2
-            h_max = L2 + d3_max
-            
-            # Coordenada radial e coordenada Z
-            r_inner = np.array(h_min * np.sin(q2))
-            r_outer = np.array(h_max * np.sin(q2))
-            z_inner = np.array(L1 - h_min * np.cos(q2))
-            z_outer = np.array(L1 - h_max * np.cos(q2))
-
             # --------------------------- WORKSPACE RZ --------------------------- #
+            # Dados
+            r_inner, r_outer = self.robot.r_inner, self.robot.r_outer
+            z_inner, z_outer = self.robot.z_inner, self.robot.z_outer
+
             # Cria polígono fechado para fill():
             r_polygon = np.concatenate([r_outer, r_inner[::-1]])
             z_polygon = np.concatenate([z_outer, z_inner[::-1]])
@@ -186,28 +169,24 @@ class RobotPlot(FigureCanvas):
             # Plotar
             self.ax_rz.plot(r_outer, z_outer, 'g--', label='Reach máximo')
             self.ax_rz.plot(r_inner, z_inner, 'r--', label='Reach mínimo')
-            self.ax_rz.fill(r_polygon, z_polygon, alpha=0.2, color='green', label="Workspace RZ")
+            self.ax_rz.fill(r_polygon, z_polygon, alpha=0.2, color='green', label="Workspace")
             self.ax_rz.legend()
 
-            # --------------------------- WORKSPACE XY --------------------------- #
-            # Alcance radial mínimo e máximo no plano XY
-            r_min = np.min(r_inner)
-            r_max = np.max(r_outer)
+            # --------------------------- WORKSPACE XY --------------------------- #            
+            # Dados
+            x_inner, x_outer = self.robot.x_inner, self.robot.x_outer
+            y_inner, y_outer = self.robot.y_inner, self.robot.y_outer
 
-            # Coordenas X e Y
-            x_inner = r_min * np.cos(q1)
-            x_outer = r_max * np.cos(q1)
-            y_inner = r_min * np.sin(q1)
-            y_outer = r_max * np.sin(q1)
-            
+            # Cria polígono fechado para fill():
+            x_polygon = np.concatenate([x_outer, x_inner[::-1]])
+            y_polygon = np.concatenate([y_outer, y_inner[::-1]])
+
             # Plotar
             self.ax_xy.plot(x_outer, y_outer, 'g--', alpha=0.5, label='Reach máximo')
             self.ax_xy.plot(x_inner, y_inner, 'r--', alpha=0.5, label='Reach mínimo')
-            x_polygon = np.concatenate([x_outer, x_inner[::-1]])
-            y_polygon = np.concatenate([y_outer, y_inner[::-1]])
             self.ax_xy.fill(x_polygon, y_polygon, alpha=0.2, color='green', label="Workspace XY")
             # self.ax_xy.legend()
-            
+
         except Exception as e:
             print(f"Erro ao plotar workspace: {e}")
 
@@ -277,33 +256,15 @@ class RobotPlot(FigureCanvas):
     """--------------------------- Linhas de Posicionamento: plot RZ ---------------------------"""
     def set_rz_pos(self, pos0, posf):
         """Colocar as linhas de posicionamento no plot RZ"""
-        # Função para o range de Z
-        def Z_range(r):
-            # Parâmetros
-            L1 = self.robot.L1
-            L2 = self.robot.L2
-            d3_max = self.robot.d3_max
-            q2_range = self.robot.J2_range
-
-            q2 = np.linspace(*q2_range, 200)
-            sin_q2 = np.sin(q2)
-            valid_sin = np.abs(sin_q2) > 1e-6
-            d3 = np.where(valid_sin, r / sin_q2 - L2, np.inf)
-            valid = valid_sin & (d3 >= 0) & (d3 <= d3_max)
-            if not np.any(valid):
-                return None, None
-            z = L1 - (L2 + d3[valid]) * np.cos(q2[valid])
-
-            return np.min(z), np.max(z)
-
-        # Cálculo
+        # Dados
         x0, y0, _ = pos0
         xf, yf, _ = posf
         r0 = np.sqrt(x0**2 + y0**2)
         rf = np.sqrt(xf**2 + yf**2)
-        z0_min, z0_max = Z_range(r0)
-        zf_min, zf_max = Z_range(rf)
+        z0_min, z0_max = self.robot.calc_Zrange(r0)
+        zf_min, zf_max = self.robot.calc_Zrange(rf)
 
+        # Validação: limites físicos
         if z0_min is None:
             self.r_initial_line.set_data([], [])
             return
@@ -316,7 +277,7 @@ class RobotPlot(FigureCanvas):
         z0_grid = np.linspace(z0_min, z0_max, N)
         zf_grid = np.linspace(zf_min, zf_max, N)
         
-        # Plot R
+        # Plots
         self.r_initial_line.set_data(N*[r0], z0_grid)
         self.r_final_line.set_data(N*[rf], zf_grid)
 

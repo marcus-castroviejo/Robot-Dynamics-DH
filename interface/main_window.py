@@ -61,11 +61,21 @@ class RobotControlInterface(QMainWindow):
         self.default_q1 = np.deg2rad(0.0)
         self.default_q2 = np.deg2rad(80.0)
         self.default_d3 = 0.03
+
+        # Estilo para os botões
+        self.error_style = """
+        QLineEdit {
+            border: 2px solid #dc3545;
+            background-color: #fff5f5;
+        }"""
+        self.normal_style = ""
         
         # Coloar o robô na posição de início
         self.update_robot_position(self.initial_t, self.default_q1, self.default_q2, self.default_d3)
         self.update_trajectory_params()
+        print("CCC")
         self.update_coordenate_system()
+        print("DDD")
         print("q0:\t", np.round([np.rad2deg(self.q0[0]), np.rad2deg(self.q0[1]), 100*self.q0[2]], 2))
         print("qf:\t", np.round([np.rad2deg(self.qf[0]), np.rad2deg(self.qf[1]), 100*self.qf[2]], 2))
         print("pos0:\t", np.round(self.pos0, 2))
@@ -202,29 +212,29 @@ class RobotControlInterface(QMainWindow):
         OBS - Posicionamento: .addWidget("campo", linha, coluna)
         """
         # Sistema de Coordenadas
-        sistcoord_label = QLabel("Coordenadas:")
+        sistcoord_label = QLabel("Coordenadas:")            # (Linha 0): "Coordenadas" | "Juntas" | "Cartesiano"
         layout.addWidget(sistcoord_label, 0, 0)
         layout.addWidget(self.radio_joint, 0, 1)
         layout.addWidget(self.radio_cartesian, 0, 2)
 
         # Headers: 
-        init_label = QLabel("Inicial")                      # (Linha 0): " " | "Inicial" | "Final"
+        init_label = QLabel("Inicial")                      # (Linha 1): " " | "Inicial" | "Final"
         final_label = QLabel("Final")
         layout.addWidget(init_label, 1, 1)
         layout.addWidget(final_label, 1, 2)
         
         # Linhas das juntas: 
-        self.q1_label = QLabel("q1 [deg]:")                 # (Linha 1): "q1 [deg]:" | [entrada: initial_q1] | [entrada: final_q1]
+        self.q1_label = QLabel("q1 [deg]:")                 # (Linha 2): "q1 [deg]:" | [entrada: initial_q1] | [entrada: final_q1]
         layout.addWidget(self.q1_label, 2, 0)
         layout.addWidget(self.initial_q1, 2, 1)
         layout.addWidget(self.final_q1, 2, 2)
 
-        self.q2_label = QLabel("q2 [deg]:")                 # (Linha 2): "q2 [deg]:" | [entrada: initial_q2] | [entrada: final_q2]
+        self.q2_label = QLabel("q2 [deg]:")                 # (Linha 3): "q2 [deg]:" | [entrada: initial_q2] | [entrada: final_q2]
         layout.addWidget(self.q2_label, 3, 0)
         layout.addWidget(self.initial_q2, 3, 1)
         layout.addWidget(self.final_q2, 3, 2)
 
-        self.d3_label = QLabel("d3 [cm]:")                  # (Linha 3): "d3 [cm]:" | [entrada: initial_q3] | [entrada: final_q3]
+        self.d3_label = QLabel("d3 [cm]:")                  # (Linha 4): "d3 [cm]:" | [entrada: initial_q3] | [entrada: final_q3]
         layout.addWidget(self.d3_label, 4, 0)
         layout.addWidget(self.initial_d3, 4, 1)
         layout.addWidget(self.final_d3, 4, 2)
@@ -246,8 +256,8 @@ class RobotControlInterface(QMainWindow):
         double_validator.setBottom(1)
 
         # Campos de entrada: Duração e dt
-        self.duration_field = QLineEdit("5.0")        # Duração
-        self.dt_field = QLineEdit("50")               # Dt
+        self.duration_field = QLineEdit("5")            # Duração
+        self.dt_field = QLineEdit("50")                 # Dt
         # Validador
         self.duration_field.setValidator(double_validator)
         self.dt_field.setValidator(double_validator)
@@ -317,7 +327,6 @@ class RobotControlInterface(QMainWindow):
         # self.btn_calc_trajectory = QPushButton("Calcular Trajetória")
         self.btn_simulate = QPushButton("Simular")
         self.btn_stop = QPushButton("Pausar")
-        # self.btn_clear_interface = QPushButton("Limpar interface")
         # Adotar o estilo do botão
         button_style = """
             QPushButton {
@@ -330,16 +339,13 @@ class RobotControlInterface(QMainWindow):
         # self.btn_calc_trajectory.setStyleSheet(button_style)
         self.btn_simulate.setStyleSheet(button_style)
         self.btn_stop.setStyleSheet(button_style)
-        # self.btn_clear_interface.setStyleSheet(button_style)
         # Alguns botões são desabilitados inicialmente
         self.btn_stop.setEnabled(False)
         self.btn_simulate.setEnabled(False)
-        # self.btn_clear_interface.setEnabled(True)
         # Adiciona os Widgets
         # layout.addWidget(self.btn_calc_trajectory)
         layout.addWidget(self.btn_simulate)
         layout.addWidget(self.btn_stop)
-        # layout.addWidget(self.btn_clear_interface)
         
         return group
     
@@ -401,7 +407,6 @@ class RobotControlInterface(QMainWindow):
             self.btn_calc_trajectory.clicked.connect(self.calculate_trajectory)
             self.btn_simulate.clicked.connect(self.start_stop_simulation)
             self.btn_stop.clicked.connect(self.pause_resume_simulation)
-            # self.btn_clear_interface.clicked.connect(self.update_clear_interface)
             self.speed_slider.valueChanged.connect(self.update_speed)
             self.use_controller.clicked.connect(self.update_controller)
             self.radio_joint.toggled.connect(self.update_position_labels)
@@ -415,16 +420,6 @@ class RobotControlInterface(QMainWindow):
             self.final_d3.textChanged.connect(self.update_coordenate_system)
             self.duration_field.textChanged.connect(self.update_trajectory_params)
             self.dt_field.textChanged.connect(self.update_trajectory_params)
-
-            # Entradas dados: Atualização dos dados (tempo real): editingFinished
-            self.initial_q1.editingFinished.connect(self.validate_inputs)
-            self.initial_q2.editingFinished.connect(self.validate_inputs)
-            self.initial_d3.editingFinished.connect(self.validate_inputs)
-            self.final_q1.editingFinished.connect(self.validate_inputs)
-            self.final_q2.editingFinished.connect(self.validate_inputs)
-            self.final_d3.editingFinished.connect(self.validate_inputs)
-            self.duration_field.editingFinished.connect(self.validate_inputs)
-            self.dt_field.editingFinished.connect(self.validate_inputs)
             
             # Conecta com a Thread de simulation_thread.py
             # Quando os sinais chegam, as funções de update são acionadas
@@ -470,8 +465,12 @@ class RobotControlInterface(QMainWindow):
         return pos0, posf
 
     """--------------------------- Validação inicial ---------------------------"""
-    def initial_validation(self):
+    def initial_validation(self, block=False):
         """Validação entradas nulas e não numéricas"""
+        # Flag
+        all_valid = True
+
+        # Campos
         fields = [
             (self.initial_q1, "q1 inicial"), (self.initial_q2, "q2 inicial"), (self.initial_d3, "d3 inicial"),
             (self.final_q1, "q1 final"), (self.final_q2, "q2 final"), (self.final_d3, "d3 final"),
@@ -480,81 +479,245 @@ class RobotControlInterface(QMainWindow):
         
         for field, name in fields:
             if not field.text().strip():                                                # Validação: entradas nulas
-                QMessageBox.warning(self, "Campo Vazio", f"Preencha '{name}'")
-                field.setFocus()
-                return False
-            
+                all_valid = False
+                field.setStyleSheet(self.error_style)
+                if block:
+                    QMessageBox.warning(self, "Campo Vazio", f"Preencha '{name}'")
+                    return False
+                continue
+
             try:                                                                        # Validação: não numéricos
                 float(field.text())
             except ValueError:
-                QMessageBox.warning(self, "Valor Inválido", f"'{name}' deve ser numérico")
-                field.setFocus()
-                return False
-        
-        return True
+                all_valid = False
+                field.setStyleSheet(self.error_style)
+                if block: 
+                    QMessageBox.warning(self, "Valor Inválido", f"'{name}' deve ser numérico")
+                    return False
+                continue
+            
+            field.setStyleSheet(self.normal_style)
 
-    """--------------------------- Validação dos limites operacionais ---------------------------"""
-    def validate_inputs(self, noWarning=False):
-        """Validação dos limites operacionais"""
+        return all_valid
+
+    """--------------------------- Validação das entradas ---------------------------"""
+    def validate_inputs(self, block=False):
         try:
-            tf, dt = self.tf, self.dt
-            q1_initial, q2_initial, d3_initial = self.q0
-            q1_final, q2_final, d3_final = self.qf
-
-
-            # Limites físicos
-            d3_max = self.robot.d3_max
-            q1_min, q1_max = self.robot.J1_range
-            q2_min, q2_max = self.robot.J2_range
-
-            # [Validação]: (duração, dt)                        # [Validação]: Duração [(Duration > 0)], Dt [(0 < dt < duração)]
-            if tf <= 0:
-                QMessageBox.warning(self, "Valor Inválido", "Duração > 0")
-                self.duration_field.setFocus()
-                return False
-                
-            if dt <= 0 or dt >= tf:
-                QMessageBox.warning(self, "Valor Inválido", "0 < dt < duração")
-                self.dt_field.setFocus()
+            if not self.initial_validation(block):
                 return False
 
-            # [Validação]: (q1, q2, d3):                        # [Validação]: D3 [(0 < D3 < DR_MAX)], Qi [(RANGE_MIN <= q <= RANGE_MAX)] 
-            if q1_initial < q1_min or q1_initial > q1_max:
-                if not noWarning: QMessageBox.warning(self, "Limite Físico", f"q1 inicial: {np.rad2deg(q1_min)} a {np.rad2deg(q1_max)} graus")
-                self.initial_q1.setFocus()
+            if not self.validate_trajectory_inputs(block):
                 return False
+
+            if self.radio_joint.isChecked():
+                if not self.validate_joint_inputs(block):
+                    return False
             
-            if q1_final < q1_min or q1_final > q1_max:
-                if not noWarning: QMessageBox.warning(self, "Limite Físico", f"q1 final: {np.rad2deg(q1_min)} a {np.rad2deg(q1_max)} graus")
-                self.final_q1.setFocus()
-                return False
+            elif self.radio_cartesian.isChecked():
+                if not self.validate_cartesian_inputs(block):
+                    return False
             
-            if q2_initial < q2_min or q2_initial > q2_max:
-                if not noWarning: QMessageBox.warning(self, "Limite Físico", f"q2 inicial: {np.rad2deg(q2_min)} a {np.rad2deg(q2_max)} graus")
-                self.initial_q2.setFocus()
-                return False
-            
-            if q2_final < q2_min or q2_final > q2_max:
-                if not noWarning: QMessageBox.warning(self, "Limite Físico", f"q2 final: {np.rad2deg(q2_min)} a {np.rad2deg(q2_max)} graus")
-                self.final_q2.setFocus()
-                return False
-            
-            if d3_initial < 0 or d3_initial > d3_max:
-                if not noWarning: QMessageBox.warning(self, "Limite Físico", f"d3 inicial: 0.00 a {100*d3_max:.2f} cm")
-                self.initial_d3.setFocus()
-                return False
-                
-            if d3_final < 0 or d3_final > d3_max:
-                if not noWarning: QMessageBox.warning(self, "Limite Físico", f"d3 final: 0.00 a {100*d3_max:.2f} cm")
-                self.final_d3.setFocus()
-                return False
-
             return True
             
         except Exception as e:
-            QMessageBox.critical(self, "Erro de Validação", str(e))
-            return False
+            QMessageBox.critical(self, "Erro na Validação", f"Erro na Validação: {str(e)}")
+            return False    
+
+    """--------------------------- Validação da trajetória ---------------------------"""
+    def validate_trajectory_inputs(self, block=False):
+        """Validação das entradas do campo de trajetórias"""
+        # Flag
+        all_valid = True
+
+        # --- [Validação]: Duração [(Duration > 0)], Dt [(0 < dt < duração)] ---
+        # Validar dt
+        if self.dt <= 0.0 or self.dt >= self.tf:
+            all_valid = False
+            self.dt_field.setStyleSheet(self.error_style)
+            if block: 
+                QMessageBox.warning(self, "Valor Inválido", "0 < dt < duração")
+                self.dt_field.setFocus()
+                return False    
+        else:
+            self.dt_field.setStyleSheet(self.normal_style)
+        
+        # Validar duração
+        if self.tf <= 0.0:
+            all_valid = False
+            self.duration_field.setStyleSheet(self.error_style)
+            if block: 
+                QMessageBox.warning(self, "Valor Inválido", "Duração > 0")
+                self.duration_field.setFocus()
+                return False
+        else:
+            self.duration_field.setStyleSheet(self.normal_style)
+        
+        return all_valid
     
+    """--------------------------- Validação dos limites operacionais (juntas) ---------------------------"""
+    def validate_joint_inputs(self, block=False):
+        """Validação dos limites operacionais em coordenadas de juntas"""
+        # Flag
+        all_valid = True
+
+        # Dados
+        q1_initial, q2_initial, d3_initial = self.q0
+        q1_final, q2_final, d3_final = self.qf
+
+        # Limites físicos
+        d3_max = self.robot.d3_max
+        q1_min, q1_max = self.robot.J1_range
+        q2_min, q2_max = self.robot.J2_range
+
+        # --- [Validação]: Qi [(RANGE_MIN <= q <= RANGE_MAX)] & D3 [(0 < D3 < DR_MAX)] ---
+        # Validar q1 inicial
+        if q1_initial < q1_min or q1_initial > q1_max:
+            all_valid = False
+            self.initial_q1.setStyleSheet(self.error_style)
+            if block: 
+                QMessageBox.warning(self, "Limite Físico", f"q1 inicial: {np.rad2deg(q1_min)} a {np.rad2deg(q1_max)} graus")
+                self.initial_q1.setFocus()
+                return False
+        else:
+            self.initial_q1.setStyleSheet(self.normal_style)
+        
+        # Validar q1 final
+        if q1_final < q1_min or q1_final > q1_max:
+            all_valid = False
+            self.final_q1.setStyleSheet(self.error_style)
+            if block: 
+                QMessageBox.warning(self, "Limite Físico", f"q1 final: {np.rad2deg(q1_min)} a {np.rad2deg(q1_max)} graus")
+                self.final_q1.setFocus()
+                return False
+        else:
+            self.final_q1.setStyleSheet(self.normal_style)
+        
+        # Validar q2 inicial
+        if q2_initial < q2_min or q2_initial > q2_max:
+            all_valid = False
+            self.initial_q2.setStyleSheet(self.error_style)
+            if block: 
+                QMessageBox.warning(self, "Limite Físico", f"q2 inicial: {np.rad2deg(q2_min)} a {np.rad2deg(q2_max)} graus")
+                self.initial_q2.setFocus()
+                return False
+        else:
+            self.initial_q2.setStyleSheet(self.normal_style)
+        
+        # Validar q2 final
+        if q2_final < q2_min or q2_final > q2_max:
+            all_valid = False
+            self.final_q2.setStyleSheet(self.error_style)
+            if block: 
+                QMessageBox.warning(self, "Limite Físico", f"q2 final: {np.rad2deg(q2_min)} a {np.rad2deg(q2_max)} graus")
+                self.final_q2.setFocus()
+                return False
+        else:
+            self.final_q2.setStyleSheet(self.normal_style)
+        
+        # Validar d3 inicial
+        if d3_initial < 0 or d3_initial > d3_max:
+            all_valid = False
+            self.initial_d3.setStyleSheet(self.error_style)
+            if block: 
+                QMessageBox.warning(self, "Limite Físico", f"d3 inicial: 0.00 a {100*d3_max:.2f} cm")
+                self.initial_d3.setFocus()
+                return False
+        else:
+            self.initial_d3.setStyleSheet(self.normal_style)
+        
+        # Validar d3 final
+        if d3_final < 0 or d3_final > d3_max:
+            all_valid = False
+            self.final_d3.setStyleSheet(self.error_style)
+            if block: 
+                QMessageBox.warning(self, "Limite Físico", f"d3 final: 0.00 a {100*d3_max:.2f} cm")
+                self.final_d3.setFocus()
+                return False
+        else:
+            self.final_d3.setStyleSheet(self.normal_style)
+
+        return all_valid
+
+    """--------------------------- Validação dos limites operacionais (cartesiano) ---------------------------"""
+    def validate_cartesian_inputs(self, block=False):
+        """Validação dos limites operacionais em coordenadas cartesianas"""
+        # Flag
+        all_valid = True
+
+        # Dados
+        x0, y0, z0 = self.pos0
+        xf, yf, zf = self.posf
+        r0 = np.sqrt(x0**2 + y0**2)
+        rf = np.sqrt(xf**2 + yf**2) 
+
+        # Limites físicos
+        r_min, r_max = self.robot.r_min, self.robot.r_max
+        z0_min, z0_max = self.robot.calc_Zrange(r0)
+        zf_min, zf_max = self.robot.calc_Zrange(rf)
+        print("A")
+
+        # --- [Validação]: R [(R_MIN <= R <= R_MAX)] & Z [(Z_MIN < Z < Z_MAX)] ---
+        # Validar R inicial
+        if r0 < r_min or r0 > r_max:
+            all_valid = False
+            self.initial_q1.setStyleSheet(self.error_style)
+            self.initial_q2.setStyleSheet(self.error_style)
+            if block: 
+                QMessageBox.warning(self, "Limite Físico", f"Raio inicial (XY): {r_min:.2f} a {r_max:.2f} m")
+                return False
+        else:
+            self.initial_q1.setStyleSheet(self.normal_style)
+            self.initial_q2.setStyleSheet(self.normal_style)
+        print("B")
+
+        # Validar R final
+        if rf < r_min or rf > r_max:
+            all_valid = False
+            self.final_q1.setStyleSheet(self.error_style)
+            self.final_q2.setStyleSheet(self.error_style)
+            if block: 
+                QMessageBox.warning(self, "Limite Físico", f"Raio final (XY): {r_min:.2f} a {r_max:.2f} m")
+                return False
+        else:
+            self.final_q1.setStyleSheet(self.normal_style)
+            self.final_q2.setStyleSheet(self.normal_style)
+        print("C")
+        
+        if not all_valid:
+            self.initial_d3.setStyleSheet(self.normal_style)
+            self.final_d3.setStyleSheet(self.normal_style)
+            return False
+        
+        # Validar Z inicial
+        if z0_min is None:
+            all_valid = False
+        else:
+            if z0 < z0_min or z0 > z0_max:
+                all_valid = False
+                self.initial_d3.setStyleSheet(self.error_style)
+                if block: 
+                    QMessageBox.warning(self, "Limite Físico", f"Z inicial (RZ): {z0_min:.2f} a {z0_max:.2f} m")
+                    return False
+            else:
+                self.initial_d3.setStyleSheet(self.normal_style)
+        print("D")
+        
+        # Validar Z final
+        if zf_min is None:
+            all_valid = False
+        else:
+            if zf < zf_min or zf > zf_max:
+                all_valid = False
+                self.final_d3.setStyleSheet(self.error_style)
+                if block: 
+                    QMessageBox.warning(self, "Limite Físico", f"Z final (RZ): {zf_min:.2f} a {zf_max:.2f} m")
+                    return False
+            else:
+                self.final_d3.setStyleSheet(self.normal_style)
+        print("E")
+        
+        return all_valid
+
     """
     =================================================================================================================
                                                 1) Funções de Controle
@@ -565,7 +728,7 @@ class RobotControlInterface(QMainWindow):
     def calculate_trajectory(self):
         """Calcular trajetória"""
         try:
-            if not self.validate_inputs():
+            if not self.validate_inputs(block=True):
                 return
             
             # Gera a Trajetória: trajectory = [(t, q_t, qd_t, qdd_t), (...)]
@@ -579,7 +742,6 @@ class RobotControlInterface(QMainWindow):
 
             # [Update plot]: posiciona o robô, adiciona a Trajetória Completa e a Posição Final nos plots
             if hasattr(self, 'robot_plot'):
-                # self.robot_plot.update_robot_position(*self.q0)                     # Posiciona o robô com q0
                 self.robot_plot.reset_position_graph()                              # Reseta o plot q(t)
                 self.robot_plot.reset_positioning_lines()
                 self.robot_plot.set_trajectory(self.trajectory, trajectory_points)  # Adiciona a Trajetória Completa
@@ -587,7 +749,6 @@ class RobotControlInterface(QMainWindow):
             
             # Ativa o Botão de "Simular"
             self.btn_simulate.setEnabled(True)
-            # self.btn_clear_interface.setEnabled(False)
             # Adiciona status no log
             self.update_status(f"Trajetória: {len(self.trajectory)} pts, {self.tf}s")
             
@@ -614,6 +775,9 @@ class RobotControlInterface(QMainWindow):
                 QMessageBox.warning(self, "Aviso", "Calcule trajetória primeiro!")
                 return
             
+            if not self.validate_inputs(block=True):
+                return
+
             if hasattr(self, 'robot_plot'):
                 self.robot_plot.reset_position_graph()
                 self.robot_plot.reset_positioning_lines()
@@ -676,7 +840,6 @@ class RobotControlInterface(QMainWindow):
             self.btn_calc_trajectory.setEnabled(not enable)
             self.progress_bar.setVisible(enable)
             if enable: self.progress_bar.setValue(0)
-            # self.btn_clear_interface.setEnabled(not enable)
             self.radio_joint.setEnabled(not enable)
             self.radio_cartesian.setEnabled(not enable)
             self.enable_position_buttons(not enable)
@@ -705,11 +868,6 @@ class RobotControlInterface(QMainWindow):
                                                 2) Funções de Update (Tempo real)
     =================================================================================================================
     """
-
-    """--------------------------- Limpar Interface ---------------------------"""
-    def update_clear_interface(self):
-        self.clear_interface()
-        self.update_status("Interface resetada")
 
     """--------------------------- Atualizar Velocidade de simulação ---------------------------"""
     def update_speed(self, value):
@@ -772,28 +930,29 @@ class RobotControlInterface(QMainWindow):
     """--------------------------- Transformação de Coordenadas: juntas/cartesiano ---------------------------"""
     def update_coordenate_system(self):
         try:
-            if not self.initial_validation():
-                return None
-            
-            # 1. Transformação: cartesian -> joints
+            if not self.initial_validation(block=False):
+                return
+
+            # Cartesian -> joints
             if self.radio_joint.isChecked():
                 self.q0, self.qf = self.read_joints()
                 self.pos0 = self.robot.forward_kinematics(*self.q0)
                 self.posf = self.robot.forward_kinematics(*self.qf)
 
-            # 2. Transformação: joints -> cartesian
+            # Joints -> cartesian
             elif self.radio_cartesian.isChecked():
                 self.pos0, self.posf = self.read_cartesian()
                 self.q0 = self.robot.inverse_kinematics(*self.pos0)
                 self.qf = self.robot.inverse_kinematics(*self.posf)
 
-            # Limpa a interface
+            # Validação
+            self.validate_inputs(block=False)   # Aqui
+
+            # Plots
             self.clear_interface()
             self.robot_plot.set_target_position(*self.posf)
-            
-            # Adicionar plot    (já resolve para resultados inválidos: não plota)
             self.robot_plot.set_xy_pos(self.pos0, self.posf)
-            self.robot_plot.set_rz_pos(self.pos0, self.posf)            
+            self.robot_plot.set_rz_pos(self.pos0, self.posf)
         
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro na transformação do sistema de coordenada: {str(e)}")
@@ -801,8 +960,15 @@ class RobotControlInterface(QMainWindow):
     """--------------------------- Parâmetros da Trajetória ---------------------------"""
     def update_trajectory_params(self):
         try:
+            if not self.initial_validation(block=False):
+                return
+            
             self.tf = float(self.duration_field.text())
             self.dt = float(self.dt_field.text()) / 1000
+
+            # Validação
+            self.validate_trajectory_inputs(block=False)
+
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro na configuração da trajetória: {str(e)}")
     
@@ -829,6 +995,9 @@ class RobotControlInterface(QMainWindow):
                 self.set_transformed_inputs()
         
         self.update_coordenate_system()
+
+        if not self.validate_inputs(block=False):
+            self.update_status("Aviso: Configuração fora dos limites operacionais")
 
         print("q0:\t", np.round([np.rad2deg(self.q0[0]), np.rad2deg(self.q0[1]), 100*self.q0[2]], 2))
         print("qf:\t", np.round([np.rad2deg(self.qf[0]), np.rad2deg(self.qf[1]), 100*self.qf[2]], 2))
