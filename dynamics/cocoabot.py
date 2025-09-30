@@ -6,6 +6,7 @@
 
 Campos deste código:
 ["Setup Inicial"]:              Inicialização, Configuração, Criação do CocoaBot
+["Limites de Movimentação"]:    Limites físicos de movimentação
 ["Dinâmica e Cinemática"]:      Forward Kynematics, Dinâmica [Inércia, Coriolis, Gravidade]
 """
 from sympy import *
@@ -60,39 +61,11 @@ class CocoaBot:
     
     """
     =================================================================================================================
-                                                Dinâmica e Cinemática
+                                                Limites de Movimentação
     =================================================================================================================
     """
 
-    """--------------------------- Forward Kinematics: posição do efetuador final ---------------------------"""
-    def forward_kinematics(self, q1, q2, d3):
-        """Cinemática direta"""
-        r = self.robot_dynamics
-        q = [q1, q2, d3]
-        pos = r.eval_matrix(matrix=r.base_to_end_effector[:3,3], q=q)
-        return np.array(pos, dtype=float).flatten()
-
-    """--------------------------- Forward Kinematics: juntas -> cartesiano ---------------------------"""
-    def get_joint_positions(self, q1, q2, d3):
-        """Posições das juntas (desejadas)"""
-        r = self.robot_dynamics
-        q = [q1, q2, d3]
-        positions = [np.array([0.0, 0.0, 0.0])]        
-        joint_positions = [r.eval_matrix(matrix=b2j[:3,3], q=q) for b2j in r.base_to_joint]
-        positions.extend([np.array(posi, dtype=float).flatten() for posi in joint_positions])
-        return positions
-    
-    """--------------------------- Inercia, Coriolis e Gravidade ---------------------------"""
-    def calculate_dynamics(self, q, qd, qdd):
-        """Calcular dinâmica"""
-        # Use sua classe Robot completa
-        r = self.robot_dynamics
-        M = r.eval_matrix(r.inertia_matrix, q=q)
-        C = r.eval_matrix(r.coriolis_matrix, q=q, dq=qd)
-        G = r.eval_matrix(r.gravity_vector, q=q)
-        return M, C, G
-
-    """--------------------------- Limites de movimentação do robô ---------------------------"""
+    """--------------------------- Limites de movimentação do robô (cartesiano) ---------------------------"""
     def get_cartesian_ranges(self):
         # Ranges de movimentação
         q1 = np.linspace(*self.J1_range, 100)
@@ -140,6 +113,40 @@ class CocoaBot:
         z_min = np.min(z)
         z_max = np.max(z)
         return z_min, z_max
+
+    """
+    =================================================================================================================
+                                                Dinâmica e Cinemática
+    =================================================================================================================
+    """
+
+    """--------------------------- Forward Kinematics: posição do efetuador final ---------------------------"""
+    def forward_kinematics(self, q1, q2, d3):
+        """Cinemática direta"""
+        r = self.robot_dynamics
+        q = [q1, q2, d3]
+        pos = r.eval_matrix(matrix=r.base_to_end_effector[:3,3], q=q)
+        return np.array(pos, dtype=float).flatten()
+
+    """--------------------------- Forward Kinematics: juntas -> cartesiano ---------------------------"""
+    def get_joint_positions(self, q1, q2, d3):
+        """Posições das juntas (desejadas)"""
+        r = self.robot_dynamics
+        q = [q1, q2, d3]
+        positions = [np.array([0.0, 0.0, 0.0])]        
+        joint_positions = [r.eval_matrix(matrix=b2j[:3,3], q=q) for b2j in r.base_to_joint]
+        positions.extend([np.array(posi, dtype=float).flatten() for posi in joint_positions])
+        return positions
+    
+    """--------------------------- Inercia, Coriolis e Gravidade ---------------------------"""
+    def calculate_dynamics(self, q, qd, qdd):
+        """Calcular dinâmica"""
+        # Use sua classe Robot completa
+        r = self.robot_dynamics
+        M = r.eval_matrix(r.inertia_matrix, q=q)
+        C = r.eval_matrix(r.coriolis_matrix, q=q, dq=qd)
+        G = r.eval_matrix(r.gravity_vector, q=q)
+        return M, C, G
 
     """--------------------------- Inverse Kinematics: cartesiano -> juntas ---------------------------"""
     def inverse_kinematics(self, target_x, target_y, target_z):

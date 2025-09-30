@@ -15,6 +15,7 @@ Campos deste código:
 ["Setup Inicial"]:                                  Inicialização, Criação da Interface, Tamanho da Janela
 ["Criando a User Interface"]:                       Configuração da Interface (Painéis: [1. Controle, 2. Visualização], Campos)
 ["Métodos Funcionais: Conexão Botões e Sinais"]:    Conexão dos Botões e Sinais da Simulation_Thread com Funções()
+["0) Funções Auxiliares"]:                          Leitura de dados, Validação, Ativação de botões, Limpar interface
 ["1) Funções de Controle"]:                         Funções ativadas pelos Botões para o Controle da Simulação
 ["2) Funções de Update (Tempo real)"]:              Funções ativadas pelos Sinais para atualização da interface: update()
 ["Fechar a Aplicação"]:                             Configuração para finalizar a simulação quando se fecha a interface
@@ -54,7 +55,7 @@ class RobotControlInterface(QMainWindow):
         # Inicializar componentes
         self.init_components()          # Cria os objetos das demais classes (CocoaBot, Trajectory, Simulation_Thread)
         self.init_ui()                  # Cria os painéis de Controle e Visualização
-        self.setup_connections()        # Conexão com os Botões (Painel de Controle) e Sinais (Simulation_Thread) -> ativa funções
+        self.setup_connections()        # Conexão com os Botões (Painel de Controle) e Sinais (Simulation_Thread) -> ativam funções
         
         # Posição inicial padrão
         self.initial_t = 0.0
@@ -73,13 +74,13 @@ class RobotControlInterface(QMainWindow):
         # Coloar o robô na posição de início
         self.update_robot_position(self.initial_t, self.default_q1, self.default_q2, self.default_d3)
         self.update_trajectory_params()
-        print("CCC")
         self.update_coordenate_system()
-        print("DDD")
-        print("q0:\t", np.round([np.rad2deg(self.q0[0]), np.rad2deg(self.q0[1]), 100*self.q0[2]], 2))
-        print("qf:\t", np.round([np.rad2deg(self.qf[0]), np.rad2deg(self.qf[1]), 100*self.qf[2]], 2))
-        print("pos0:\t", np.round(self.pos0, 2))
-        print("posf:\t", np.round(self.pos0, 2))
+
+        # Extra: validação própria
+        # print("q0:\t", np.round([np.rad2deg(self.q0[0]), np.rad2deg(self.q0[1]), 100*self.q0[2]], 2))
+        # print("qf:\t", np.round([np.rad2deg(self.qf[0]), np.rad2deg(self.qf[1]), 100*self.qf[2]], 2))
+        # print("pos0:\t", np.round(self.pos0, 2))
+        # print("posf:\t", np.round(self.pos0, 2))
 
     """--------------------------- Inicialização das outras Classes ---------------------------"""
     def init_components(self):
@@ -186,7 +187,7 @@ class RobotControlInterface(QMainWindow):
         self.radio_cartesian = QRadioButton("Cartesiano")
         self.radio_joint.setChecked(True)
 
-        # Campos de entrada: q_0 e q_f
+        # Campos de entrada: q_0 e q_f | pos_0 e pos_f
         self.initial_q1 = QLineEdit("0")                    # [entrada] q_0[1]
         self.initial_q2 = QLineEdit("80")                   # [entrada] q_0[2]
         self.initial_d3 = QLineEdit("3.0")                  # [entrada] q_0[3]
@@ -438,6 +439,7 @@ class RobotControlInterface(QMainWindow):
 
     """--------------------------- Leitura de dados: Juntas ---------------------------"""
     def read_joints(self):
+        """Ler as entradas correspondentes às coordenadas de juntas"""
         q0 = np.array([
             np.deg2rad(float(self.initial_q1.text())),
             np.deg2rad(float(self.initial_q2.text())),
@@ -452,6 +454,7 @@ class RobotControlInterface(QMainWindow):
     
     """--------------------------- Leitura de dados: Cartesiano ---------------------------"""
     def read_cartesian(self):
+        """Ler as entradas correspondentes às coordenadas cartesianas"""
         pos0 = np.array([
             float(self.initial_q1.text()),
             float(self.initial_q2.text()),
@@ -500,8 +503,9 @@ class RobotControlInterface(QMainWindow):
 
         return all_valid
 
-    """--------------------------- Validação das entradas ---------------------------"""
+    """--------------------------- Validação completa das entradas ---------------------------"""
     def validate_inputs(self, block=False):
+        """Validação completa"""
         try:
             if not self.initial_validation(block):
                 return False
@@ -654,7 +658,6 @@ class RobotControlInterface(QMainWindow):
         r_min, r_max = self.robot.r_min, self.robot.r_max
         z0_min, z0_max = self.robot.calc_Zrange(r0)
         zf_min, zf_max = self.robot.calc_Zrange(rf)
-        print("A")
 
         # --- [Validação]: R [(R_MIN <= R <= R_MAX)] & Z [(Z_MIN < Z < Z_MAX)] ---
         # Validar R inicial
@@ -668,7 +671,6 @@ class RobotControlInterface(QMainWindow):
         else:
             self.initial_q1.setStyleSheet(self.normal_style)
             self.initial_q2.setStyleSheet(self.normal_style)
-        print("B")
 
         # Validar R final
         if rf < r_min or rf > r_max:
@@ -681,8 +683,8 @@ class RobotControlInterface(QMainWindow):
         else:
             self.final_q1.setStyleSheet(self.normal_style)
             self.final_q2.setStyleSheet(self.normal_style)
-        print("C")
         
+        # Se R estiver inválido, não verifica Z
         if not all_valid:
             self.initial_d3.setStyleSheet(self.normal_style)
             self.final_d3.setStyleSheet(self.normal_style)
@@ -700,7 +702,6 @@ class RobotControlInterface(QMainWindow):
                     return False
             else:
                 self.initial_d3.setStyleSheet(self.normal_style)
-        print("D")
         
         # Validar Z final
         if zf_min is None:
@@ -714,10 +715,43 @@ class RobotControlInterface(QMainWindow):
                     return False
             else:
                 self.final_d3.setStyleSheet(self.normal_style)
-        print("E")
         
         return all_valid
 
+    """--------------------------- (Des)Habilita Botões durante a Simulação ---------------------------"""
+    def enable_simulation_buttons(self, enable):
+            """(Des)Habilita Botões durante a Simulação"""
+            has_trajectory = True if hasattr(self, 'trajectory') and self.trajectory else False
+            if not enable: self.btn_simulate.setEnabled(has_trajectory)
+            self.btn_stop.setEnabled(enable)
+            self.btn_calc_trajectory.setEnabled(not enable)
+            self.progress_bar.setVisible(enable)
+            if enable: self.progress_bar.setValue(0)
+            self.radio_joint.setEnabled(not enable)
+            self.radio_cartesian.setEnabled(not enable)
+            self.enable_position_buttons(not enable)
+
+    """--------------------------- (Des)Habilita Botões de Posição ---------------------------"""
+    def enable_position_buttons(self, enable):
+        """(Des)Habilita Botões de Posição"""
+        self.initial_q1.setEnabled(enable)
+        self.initial_q2.setEnabled(enable)
+        self.initial_d3.setEnabled(enable)
+        self.final_q1.setEnabled(enable)
+        self.final_q2.setEnabled(enable)
+        self.final_d3.setEnabled(enable)
+    
+    """--------------------------- Limpar Interface ---------------------------"""
+    def clear_interface(self):
+        """Limpa a interface"""
+        try:
+            if hasattr(self, 'robot_plot'):
+                self.robot_plot.update_robot_position(*self.q0)     # Voltar o robô pra posição inicial
+                self.robot_plot.reset_position_graph()
+                self.robot_plot.reset_trajectory()  
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro ao limpar a interface: {str(e)}")
+    
     """
     =================================================================================================================
                                                 1) Funções de Controle
@@ -749,6 +783,7 @@ class RobotControlInterface(QMainWindow):
             
             # Ativa o Botão de "Simular"
             self.btn_simulate.setEnabled(True)
+
             # Adiciona status no log
             self.update_status(f"Trajetória: {len(self.trajectory)} pts, {self.tf}s")
             
@@ -832,46 +867,15 @@ class RobotControlInterface(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao {action.lower()} simulação: {str(e)}")
     
-    """--------------------------- 1.6) Funções de Controle -> (Des)Habilita Botões ---------------------------"""
-    def enable_simulation_buttons(self, enable):
-            has_trajectory = True if hasattr(self, 'trajectory') and self.trajectory else False
-            if not enable: self.btn_simulate.setEnabled(has_trajectory)
-            self.btn_stop.setEnabled(enable)
-            self.btn_calc_trajectory.setEnabled(not enable)
-            self.progress_bar.setVisible(enable)
-            if enable: self.progress_bar.setValue(0)
-            self.radio_joint.setEnabled(not enable)
-            self.radio_cartesian.setEnabled(not enable)
-            self.enable_position_buttons(not enable)
-
-    """--------------------------- 1.6.1) Funções de Controle -> (Des)Habilita Botões de Posição ---------------------------"""
-    def enable_position_buttons(self, enable):
-        self.initial_q1.setEnabled(enable)
-        self.initial_q2.setEnabled(enable)
-        self.initial_d3.setEnabled(enable)
-        self.final_q1.setEnabled(enable)
-        self.final_q2.setEnabled(enable)
-        self.final_d3.setEnabled(enable)
-    
-    """--------------------------- 1.7) Funções de Controle -> Limpar Interface ---------------------------"""
-    def clear_interface(self):
-        """Limpa a interface"""
-        try:
-            self.robot_plot.update_robot_position(*self.q0) # Voltar o robô pra posição inicial
-            self.robot_plot.reset_position_graph()
-            self.robot_plot.reset_trajectory()  
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro ao limpar a interface: {str(e)}")
-    
     """
     =================================================================================================================
                                                 2) Funções de Update (Tempo real)
     =================================================================================================================
     """
 
-    """--------------------------- Atualizar Velocidade de simulação ---------------------------"""
+    """--------------------------- 2.1) Funções de Update -> Velocidade de simulação ---------------------------"""
     def update_speed(self, value):
-        """Atualizar velocidade: altera o tempo de sleep() de atualização dos plots"""
+        """Atualiza velocidade: altera o tempo de sleep() de atualização dos plots"""
         try:
             speed = value / 10.0
             self.speed_label.setText(f"{speed:.1f}x")
@@ -879,8 +883,9 @@ class RobotControlInterface(QMainWindow):
         except Exception as e:
             print(f"Erro ao atualizar velocidade: {e}")
     
-    """--------------------------- Atualizar Controlador ---------------------------"""
+    """--------------------------- 2.2) Funções de Update -> Controlador ---------------------------"""
     def update_controller(self, checked):
+        """Verifica se o controlador será utilizado"""
         try:
             if checked:
                 self.controller = CalculatedTorqueController(self.robot)
@@ -891,7 +896,7 @@ class RobotControlInterface(QMainWindow):
         except Exception as e:
             print(f"Erro ao atualizar controlador: {e}")
     
-    """--------------------------- 2.1) Funções de Update -> Posição e Trajetória das juntas ---------------------------"""
+    """--------------------------- 2.3) Funções de Update -> Posição e Trajetória das juntas ---------------------------"""
     def update_robot_position(self, t, q1, q2, d3):
         """Atualizar gráficos de posição"""                                     # [sinal]: <- simulation_thread.position_updated
         try:
@@ -902,7 +907,7 @@ class RobotControlInterface(QMainWindow):
         except Exception as e:
             print(f"Erro ao atualizar posição: {e}")
     
-    """--------------------------- 2.2) Funções de Update -> Status (log) ---------------------------"""
+    """--------------------------- 2.4) Funções de Update -> Status (log) ---------------------------"""
     def update_status(self, message):
         """Atualizar status"""                                                  # [sinal]: <- simulation_thread.status_updated
         try:
@@ -914,7 +919,7 @@ class RobotControlInterface(QMainWindow):
         except Exception as e:
             print(f"Erro ao atualizar status: {e}")
     
-    """--------------------------- 2.3) Funções de Update -> Barra de Progresso ---------------------------"""
+    """--------------------------- 2.5) Funções de Update -> Barra de Progresso ---------------------------"""
     def update_progress(self, value):
         """Atualizar progresso"""                                               # [sinal]: <- simulation_thread.progress_updated
         try:
@@ -927,42 +932,14 @@ class RobotControlInterface(QMainWindow):
     
         """--------------------------- Em construção (!!!!) ---------------------------"""
     
-    """--------------------------- Transformação de Coordenadas: juntas/cartesiano ---------------------------"""
-    def update_coordenate_system(self):
-        try:
-            if not self.initial_validation(block=False):
-                return
-
-            # Cartesian -> joints
-            if self.radio_joint.isChecked():
-                self.q0, self.qf = self.read_joints()
-                self.pos0 = self.robot.forward_kinematics(*self.q0)
-                self.posf = self.robot.forward_kinematics(*self.qf)
-
-            # Joints -> cartesian
-            elif self.radio_cartesian.isChecked():
-                self.pos0, self.posf = self.read_cartesian()
-                self.q0 = self.robot.inverse_kinematics(*self.pos0)
-                self.qf = self.robot.inverse_kinematics(*self.posf)
-
-            # Validação
-            self.validate_inputs(block=False)   # Aqui
-
-            # Plots
-            self.clear_interface()
-            self.robot_plot.set_target_position(*self.posf)
-            self.robot_plot.set_xy_pos(self.pos0, self.posf)
-            self.robot_plot.set_rz_pos(self.pos0, self.posf)
-        
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro na transformação do sistema de coordenada: {str(e)}")
-    
-    """--------------------------- Parâmetros da Trajetória ---------------------------"""
+    """--------------------------- 2.6) Funções de Update -> Parâmetros da Trajetória ---------------------------"""
     def update_trajectory_params(self):
+        """Atualizar as variáveis do campo de trajetória"""
         try:
             if not self.initial_validation(block=False):
                 return
             
+            # Duração e dt
             self.tf = float(self.duration_field.text())
             self.dt = float(self.dt_field.text()) / 1000
 
@@ -972,39 +949,39 @@ class RobotControlInterface(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro na configuração da trajetória: {str(e)}")
     
-    """--------------------------- Label do Campo de Posição ---------------------------"""
+    """--------------------------- 2.7) Funções de Update -> Mudança do Sistema de Coordenadas ---------------------------"""
     def update_position_labels(self):
-        """Mudança de sistema de coordenadas"""
+        """Mudança de sistema de coordenadas: campos da ui e valores internos"""
         with QSignalBlocker(self.initial_q1), QSignalBlocker(self.initial_q2), \
             QSignalBlocker(self.initial_d3), QSignalBlocker(self.final_q1), \
             QSignalBlocker(self.final_q2), QSignalBlocker(self.final_d3):
 
             if self.radio_joint.isChecked():
+                # print("Cartesian -> Joint")
                 self.update_status("Transformação: cartesiano -> juntas")
-                print("Cartesian -> Joint")
                 self.q1_label.setText("q1 [deg]:")
                 self.q2_label.setText("q2 [deg]:")
                 self.d3_label.setText("d3 [cm]:")
-                self.set_transformed_inputs()
             elif self.radio_cartesian.isChecked():
+                # print("Joint -> Cartesian")
                 self.update_status("Transformação: juntas -> cartesiano")
-                print("Joint -> Cartesian")
                 self.q1_label.setText("x [m]:")
                 self.q2_label.setText("y [m]:")
                 self.d3_label.setText("z [m]:")
-                self.set_transformed_inputs()
+            self.set_transformed_inputs()
         
         self.update_coordenate_system()
 
         if not self.validate_inputs(block=False):
             self.update_status("Aviso: Configuração fora dos limites operacionais")
 
-        print("q0:\t", np.round([np.rad2deg(self.q0[0]), np.rad2deg(self.q0[1]), 100*self.q0[2]], 2))
-        print("qf:\t", np.round([np.rad2deg(self.qf[0]), np.rad2deg(self.qf[1]), 100*self.qf[2]], 2))
-        print("pos0:\t", np.round(self.pos0, 2))
-        print("posf:\t", np.round(self.pos0, 2))
+        # Extra: validação própria
+        # print("q0:\t", np.round([np.rad2deg(self.q0[0]), np.rad2deg(self.q0[1]), 100*self.q0[2]], 2))
+        # print("qf:\t", np.round([np.rad2deg(self.qf[0]), np.rad2deg(self.qf[1]), 100*self.qf[2]], 2))
+        # print("pos0:\t", np.round(self.pos0, 2))
+        # print("posf:\t", np.round(self.pos0, 2))
     
-    """--------------------------- Setar dados no Campo de Posição ---------------------------"""
+    """--------------------------- 2.7.1) Funções de Update -> Setar dados transformados no Campo de Posição ---------------------------"""
     def set_transformed_inputs(self):
         try:
             if self.radio_joint.isChecked():
@@ -1028,6 +1005,38 @@ class RobotControlInterface(QMainWindow):
 
         except Exception as e:
             self.update_status(f"Erro ao alterar o sistema de coordenadas: {str(e)}")
+    
+    """--------------------------- 2.7.2) Funções de Update -> Transformação de Coordenadas: juntas <-> cartesiano ---------------------------"""
+    def update_coordenate_system(self):
+        """Cálculo da transformação de coordenadas: forward- or inverse_kinematics"""
+        try:
+            if not self.initial_validation(block=False):
+                return
+
+            # Cartesian -> joints
+            if self.radio_joint.isChecked():
+                self.q0, self.qf = self.read_joints()
+                self.pos0 = self.robot.forward_kinematics(*self.q0)
+                self.posf = self.robot.forward_kinematics(*self.qf)
+
+            # Joints -> cartesian
+            elif self.radio_cartesian.isChecked():
+                self.pos0, self.posf = self.read_cartesian()
+                self.q0 = self.robot.inverse_kinematics(*self.pos0)
+                self.qf = self.robot.inverse_kinematics(*self.posf)
+
+            # Validação
+            self.validate_inputs(block=False)
+
+            # Plots
+            self.clear_interface()
+            if hasattr(self, 'robot_plot'):
+                self.robot_plot.set_target_position(*self.posf)
+                self.robot_plot.set_xy_pos(self.pos0, self.posf)
+                self.robot_plot.set_rz_pos(self.pos0, self.posf)
+        
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro na transformação do sistema de coordenada: {str(e)}")
     
     """
     =================================================================================================================
