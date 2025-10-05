@@ -15,6 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from matplotlib.patches import Wedge
 from PyQt6.QtWidgets import QWidget
 
 
@@ -94,7 +95,7 @@ class RobotPlot(FigureCanvas):
 
         # Plot RZ (Vista Lateral)
         self.ax_rz = self.fig.add_subplot(224)
-        self.ax_rz.set_xlim(-.8, .8)
+        self.ax_rz.set_xlim(-.6, .8)
         self.ax_rz.set_ylim(-0.2, 1.2)
         self.ax_rz.set_xlabel('Distância do centro (m)')
         self.ax_rz.set_ylabel('Z (m)')
@@ -113,11 +114,15 @@ class RobotPlot(FigureCanvas):
         self.robot_line_3d, = self.ax_3d.plot([], [], [], 'b-o', linewidth=3, markersize=8, label='Robô')
         self.robot_line_xy, = self.ax_xy.plot([], [], 'b-o', linewidth=3, markersize=8, label='Robô')
         self.robot_line_rz, = self.ax_rz.plot([], [], 'b-o', linewidth=3, markersize=8, label='Robô')
+
+        self.robot_target_line_3d, = self.ax_3d.plot([], [], [], 'g-o', alpha=0.7, linewidth=3, markersize=8, zorder=-1, label='Alvo')
+        self.robot_target_line_xy, = self.ax_xy.plot([], [], 'g-o', alpha=0.7, linewidth=3, markersize=8, zorder=-1, label='Alvo')
+        self.robot_target_line_rz, = self.ax_rz.plot([], [], 'g-o', alpha=0.7, linewidth=3, markersize=8, zorder=-1, label='Alvo')
         
         # Target (ponto verde)
-        self.target_3d, = self.ax_3d.plot([], [], [], 'go', markersize=8, label='Alvo')
-        self.target_xy, = self.ax_xy.plot([], [], 'go', markersize=8, label='Alvo')
-        self.target_rz, = self.ax_rz.plot([], [], 'go', markersize=8, label='Alvo')
+        # self.target_3d, = self.ax_3d.plot([], [], [], 'go', markersize=8, label='Alvo')
+        # self.target_xy, = self.ax_xy.plot([], [], 'go', markersize=8, label='Alvo')
+        # self.target_rz, = self.ax_rz.plot([], [], 'go', markersize=8, label='Alvo')
 
         # Trajetória (linha preta pontilhada)
         self.traj_line_3d, = self.ax_3d.plot([], [], [], 'k:', alpha=0.7, label='Trajetória')
@@ -134,13 +139,23 @@ class RobotPlot(FigureCanvas):
         self.q2_line, = self.ax_position.plot([], [], 'r-', linewidth=2, label='$q_2(t)$ [deg]') 
         self.q3_line, = self.ax_position.plot([], [], 'g-', linewidth=2, label='$q_3(t)$ [mm]')
 
-        # Linhas de Posicionamento
+        # Linhas de Posicionamento (cartesiano)
         self.x_intial_line, = self.ax_xy.plot([], [], 'b-', alpha=0.5, linewidth=1)
         self.x_final_line, = self.ax_xy.plot([], [], 'g-', alpha=0.5, linewidth=1)
         self.y_intial_line, = self.ax_xy.plot([], [], 'b-', alpha=0.5, linewidth=1)
         self.y_final_line, = self.ax_xy.plot([], [], 'g-', alpha=0.5, linewidth=1)
         self.r_initial_line, = self.ax_rz.plot([], [], 'b-', alpha=0.5, linewidth=1)
         self.r_final_line, = self.ax_rz.plot([], [], 'g-', alpha=0.5, linewidth=1)
+
+        # Linhas de Posicionamento (juntas)
+        center = (0,0)
+        self.wedge_q1_initial = Wedge(center, .2, 0, 0, facecolor='b', edgecolor='b', linewidth=1, alpha=0.5)
+        self.wedge_q1_final = Wedge(center, .14, 0, 0, facecolor='g', edgecolor='g', linewidth=1, alpha=0.5)
+        center = (0,self.robot.L1)
+        self.wedge_q2_initial = Wedge(center, .12, -90, 0, facecolor='b', edgecolor='b', linewidth=1, alpha=0.5)
+        self.wedge_q2_final = Wedge(center, .08, -90, 0, facecolor='g', edgecolor='g', linewidth=1, alpha=0.5)
+        self.d3_initial_line, = self.ax_rz.plot([], [], 'b-', alpha=0.5, linewidth=1)
+        self.d3_final_line, = self.ax_rz.plot([], [], 'g-', alpha=0.5, linewidth=1)
         
         # Adicionar legendas
         # self.ax_xy.legend()
@@ -226,17 +241,26 @@ class RobotPlot(FigureCanvas):
         try:
             r_target = np.sqrt(x**2 + y**2)
             
-            self.target_3d.set_data_3d([x], [y], [z])
-            self.target_xy.set_data([x], [y])
-            self.target_rz.set_data([r_target], [z])
-            self.draw()
+            # self.target_3d.set_data_3d([x], [y], [z])
+            # self.target_xy.set_data([x], [y])
+            # self.target_rz.set_data([r_target], [z])
             
+            self.robot_target_line_xy.set_data([0, x], [0, y])
+            self.robot_target_line_rz.set_data([0, r_target], [self.robot.L1, z])
+            self.robot_target_line_3d.set_data_3d([0, x], [0, y], [self.robot.L1, z])
+            
+            self.draw()
+
         except Exception as e:
             print(f"Erro ao definir alvo: {e}")
     
-    """--------------------------- Linhas de posicionamento: plot XY ---------------------------"""
-    def set_xy_pos(self, pos0, posf):
-        """Colocar as linhas de posicionamento no plot XY"""
+    """--------------------------- Linhas de posicionamento: Cartesiano ---------------------------"""
+    def set_cartesian_positionining_liens(self, pos0, posf):
+        """Colocar as linhas de posicionamento no modo cartesiano"""
+        # Reset
+        self.reset_positioning_lines()
+
+        # -------- Colocar as linhas de posicionamento no plot XY --------
         # Dados
         N = 100
         x0, y0, _ = pos0
@@ -251,14 +275,7 @@ class RobotPlot(FigureCanvas):
         self.x_final_line.set_data(N*[xf], grid)
         self.y_final_line.set_data(grid, N*[yf])
 
-        self.draw()
-    
-    """--------------------------- Linhas de Posicionamento: plot RZ ---------------------------"""
-    def set_rz_pos(self, pos0, posf):
-        """Colocar as linhas de posicionamento no plot RZ"""
-        # Dados
-        x0, y0, _ = pos0
-        xf, yf, _ = posf
+        # -------- Colocar as linhas de posicionamento no plot RZ --------
         r0 = np.sqrt(x0**2 + y0**2)
         rf = np.sqrt(xf**2 + yf**2)
         z0_min, z0_max = self.robot.calc_Zrange(r0)
@@ -281,6 +298,52 @@ class RobotPlot(FigureCanvas):
         self.r_initial_line.set_data(N*[r0], z0_grid)
         self.r_final_line.set_data(N*[rf], zf_grid)
 
+        self.draw()
+    
+    """--------------------------- Linhas de posicionamento: Juntas ---------------------------"""
+    def set_joint_positionining_liens(self, q0, qf):
+        # Reset
+        self.reset_positioning_lines()
+        self.ax_xy.add_patch(self.wedge_q1_initial)
+        self.ax_rz.add_patch(self.wedge_q2_initial)
+        self.ax_xy.add_patch(self.wedge_q1_final)
+        self.ax_rz.add_patch(self.wedge_q2_final)
+
+        # Dados
+        q1_0, q2_0, _ = q0
+        q1_f, q2_f, _ = qf
+
+        # Parâmetros
+        L1, L2, d3_max = self.robot.L1, self.robot.L2, self.robot.d3_max
+
+        # Angulos iniciais
+        q1_initial_thetas = (0, np.rad2deg(q1_0)) if q1_0 > 0 else (np.rad2deg(q1_0), 0)
+        self.wedge_q1_initial.set_theta1(q1_initial_thetas[0])
+        self.wedge_q1_initial.set_theta2(q1_initial_thetas[1])
+        
+        q2_initial_thetas = (-90, np.rad2deg(q2_0)-90) if q2_0 > 0 else (np.rad2deg(q2_0)-90, -90)
+        self.wedge_q2_initial.set_theta1(q2_initial_thetas[0])
+        self.wedge_q2_initial.set_theta2(q2_initial_thetas[1])
+        
+        # Ângulos finais
+        q1_final_thetas = (0, np.rad2deg(q1_f)) if q1_f > 0 else (np.rad2deg(q1_f), 0)
+        self.wedge_q1_final.set_theta1(q1_final_thetas[0])
+        self.wedge_q1_final.set_theta2(q1_final_thetas[1])
+        
+        q2_final_thetas = (-90, np.rad2deg(q2_f)-90) if q2_f > 0 else (np.rad2deg(q2_f)-90, -90)
+        self.wedge_q2_final.set_theta1(q2_final_thetas[0])
+        self.wedge_q2_final.set_theta2(q2_final_thetas[1])
+
+        # Comprimento d3
+        h = np.array([L2, L2+d3_max])
+        r0 = h * np.sin(q2_0)
+        rf = h * np.sin(q2_f)
+        z0 = L1 - h * np.cos(q2_0)
+        zf = L1 - h * np.cos(q2_f)
+
+        self.d3_initial_line.set_data(r0, z0)
+        self.d3_final_line.set_data(rf, zf)
+        
         self.draw()
 
     """
@@ -382,9 +445,12 @@ class RobotPlot(FigureCanvas):
         self.traj_line_3d.set_data_3d([], [], [])
         self.traj_line_xy.set_data([], [])
         self.traj_line_rz.set_data([], [])
-        self.target_3d.set_data_3d([], [], [])
-        self.target_xy.set_data([], [])
-        self.target_rz.set_data([], [])
+        # self.target_3d.set_data_3d([], [], [])
+        # self.target_xy.set_data([], [])
+        # self.target_rz.set_data([], [])
+        self.robot_target_line_3d.set_data_3d([], [], [])
+        self.robot_target_line_xy.set_data([], [])
+        self.robot_target_line_rz.set_data([], [])
 
         self.draw()
 
@@ -397,5 +463,15 @@ class RobotPlot(FigureCanvas):
         self.y_final_line.set_data([], [])
         self.r_initial_line.set_data([], [])
         self.r_final_line.set_data([], [])
+
+        try:
+            self.wedge_q1_initial.remove()
+            self.wedge_q2_initial.remove()
+            self.wedge_q1_final.remove()
+            self.wedge_q2_final.remove()
+        except:
+            pass
+        self.d3_initial_line.set_data([], [])
+        self.d3_final_line.set_data([], [])
 
         self.draw()

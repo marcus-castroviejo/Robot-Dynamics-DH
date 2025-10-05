@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QHBoxLayout, QGridLayout, QLabel, QLineEdit, 
                             QPushButton, QGroupBox, QSlider, QTextEdit,
                             QFrame, QCheckBox, QMessageBox, QProgressBar, 
-                            QSplitter, QRadioButton)
+                            QSplitter, QRadioButton, QTabWidget)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QDoubleValidator
 from PyQt6.QtCore import QLocale, QSignalBlocker
@@ -375,18 +375,51 @@ class RobotControlInterface(QMainWindow):
         panel.setFrameStyle(QFrame.Shape.StyledPanel)
         layout = QVBoxLayout(panel)
         # layout.setContentsMargins(5, 5, 5, 5)
+
+        # Estou testando Abas (não está pronto, obviamente)
+        # Abas/Tabs
+        self.tabs = QTabWidget()
         
-        # Título                                            # (Linha 0): "Visualização"
-        title = QLabel("Visualização")
-        title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("QLabel { color: #2E7D32; padding: 10px; }")
-        layout.addWidget(title)
+        # -------- Tab: Posicionamento --------
+        # tab_positioning = QWidget()
+        # tab_positioning_layout = QVBoxLayout(tab_positioning)
+        # # Título                                            # (Linha 0): "Visualização"
+        # title = QLabel("Visualização")
+        # title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        # title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # title.setStyleSheet("QLabel { color: #2E7D32; padding: 10px; }")
+        # tab_positioning_layout.addWidget(title)
+        # # self.tabs.addTab(tab_positioning_layout, "Posicionamento")
+
+        # # -------- Tab: Evolução temporal --------
+        # tab_evolution = QWidget()
+        # tab_evolution_layout = QVBoxLayout(tab_evolution)
+        # title = QLabel("Evolução Temporal: posição, velocidade, aceleração")
+        # title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        # title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # title.setStyleSheet("QLabel { color: #2E7D32; padding: 10px; }")
+        # tab_positioning_layout.addWidget(title)
+        # self.tabs.addTab(tab_evolution_layout, "Evolução temporal")
+        
+        # # -------- Tab: Errors --------
+        # tab_error = QWidget()
+        # tab_error_layout = QVBoxLayout(tab_error)
+        # # Title
+        # title = QLabel("Erros: evolução temporal")
+        # title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        # title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # title.setStyleSheet("QLabel { color: #2E7D32; padding: 10px; }")
+        # tab_positioning_layout.addWidget(title)
+        # # 
+        # self.tabs.addTab(tab_error_layout, "Erros")
+        
         
         # Plots                                             # (Linha 1): [Plots: RobotPlot()]
         try:
             self.robot_plot = RobotPlot(robot=self.robot)
             layout.addWidget(self.robot_plot)
+            # tab_positioning_layout.addWidget(self.robot_plot)
+            # self.tabs.addTab(tab_positioning_layout, "Posicionamento")
         except Exception as e:
             error_label = QLabel(f"Erro: {str(e)}")
             error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -776,6 +809,7 @@ class RobotControlInterface(QMainWindow):
 
             # [Update plot]: posiciona o robô, adiciona a Trajetória Completa e a Posição Final nos plots
             if hasattr(self, 'robot_plot'):
+                self.robot_plot.update_robot_position(*self.q0)
                 self.robot_plot.reset_position_graph()                              # Reseta o plot q(t)
                 self.robot_plot.reset_positioning_lines()
                 self.robot_plot.set_trajectory(self.trajectory, trajectory_points)  # Adiciona a Trajetória Completa
@@ -840,8 +874,10 @@ class RobotControlInterface(QMainWindow):
             self.robot_plot.update_robot_position(*self.q0)              # Voltar o robô pra posição inicial
             self.robot_plot.reset_position_graph()
             self.robot_plot.reset_trajectory()                              # Tirar as linhas de trajetória
-            self.robot_plot.set_xy_pos(self.pos0, self.posf)
-            self.robot_plot.set_rz_pos(self.pos0, self.posf)
+            if self.radio_cartesian.isChecked():
+                self.robot_plot.set_cartesian_positionining_liens(self.pos0, self.posf)
+            elif self.radio_joint.isChecked():
+                self.robot_plot.set_joint_positionining_liens(self.q0, self.qf)
             self.robot_plot.set_target_position(*self.posf)
             self.trajectory = None
             self.enable_simulation_buttons(False)
@@ -1032,8 +1068,10 @@ class RobotControlInterface(QMainWindow):
             self.clear_interface()
             if hasattr(self, 'robot_plot'):
                 self.robot_plot.set_target_position(*self.posf)
-                self.robot_plot.set_xy_pos(self.pos0, self.posf)
-                self.robot_plot.set_rz_pos(self.pos0, self.posf)
+                if self.radio_cartesian.isChecked():
+                    self.robot_plot.set_cartesian_positionining_liens(self.pos0, self.posf)
+                elif self.radio_joint.isChecked():
+                    self.robot_plot.set_joint_positionining_liens(self.q0, self.qf)
         
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro na transformação do sistema de coordenada: {str(e)}")
