@@ -275,7 +275,6 @@ class RobotControlInterface(QMainWindow):
         layout.addWidget(dt_label, 1, 0)
         layout.addWidget(self.dt_field, 1, 1)
 
-        self.btn_calc_trajectory = QPushButton("Calcular Trajetória")
         button_style = """
             QPushButton {
                 padding: 4px 8px;
@@ -284,8 +283,13 @@ class RobotControlInterface(QMainWindow):
                 max-height: 25px;
             }
         """
+        self.btn_calc_trajectory = QPushButton("Calcular Trajetória")
         self.btn_calc_trajectory.setStyleSheet(button_style)
         layout.addWidget(self.btn_calc_trajectory, 2, 1)
+
+        self.btn_send_to_robot = QPushButton("Enviar para o Robô")
+        self.btn_send_to_robot.setStyleSheet(button_style)
+        layout.addWidget(self.btn_send_to_robot, 3, 1)
 
         return group
     
@@ -375,55 +379,32 @@ class RobotControlInterface(QMainWindow):
         panel.setFrameStyle(QFrame.Shape.StyledPanel)
         layout = QVBoxLayout(panel)
         # layout.setContentsMargins(5, 5, 5, 5)
-
-        # Estou testando Abas (não está pronto, obviamente)
-        # Abas/Tabs
-        self.tabs = QTabWidget()
         
-        # -------- Tab: Posicionamento --------
-        # tab_positioning = QWidget()
-        # tab_positioning_layout = QVBoxLayout(tab_positioning)
-        # # Título                                            # (Linha 0): "Visualização"
+        # Título                                            # (Linha 0): "Visualização"
         # title = QLabel("Visualização")
         # title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         # title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # title.setStyleSheet("QLabel { color: #2E7D32; padding: 10px; }")
-        # tab_positioning_layout.addWidget(title)
-        # # self.tabs.addTab(tab_positioning_layout, "Posicionamento")
-
-        # # -------- Tab: Evolução temporal --------
-        # tab_evolution = QWidget()
-        # tab_evolution_layout = QVBoxLayout(tab_evolution)
-        # title = QLabel("Evolução Temporal: posição, velocidade, aceleração")
-        # title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        # title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # title.setStyleSheet("QLabel { color: #2E7D32; padding: 10px; }")
-        # tab_positioning_layout.addWidget(title)
-        # self.tabs.addTab(tab_evolution_layout, "Evolução temporal")
+        # layout.addWidget(title)
         
-        # # -------- Tab: Errors --------
-        # tab_error = QWidget()
-        # tab_error_layout = QVBoxLayout(tab_error)
-        # # Title
-        # title = QLabel("Erros: evolução temporal")
-        # title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        # title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # title.setStyleSheet("QLabel { color: #2E7D32; padding: 10px; }")
-        # tab_positioning_layout.addWidget(title)
-        # # 
-        # self.tabs.addTab(tab_error_layout, "Erros")
-        
+        # Abas/Tabs
+        self.tabs = QTabWidget()
         
         # Plots                                             # (Linha 1): [Plots: RobotPlot()]
         try:
             self.robot_plot = RobotPlot(robot=self.robot)
-            layout.addWidget(self.robot_plot)
-            # tab_positioning_layout.addWidget(self.robot_plot)
-            # self.tabs.addTab(tab_positioning_layout, "Posicionamento")
+            # Adicionar cada canvas em uma aba diferente
+            self.tabs.addTab(self.robot_plot.canvas_positioning, "Posicionamento")
+            self.tabs.addTab(self.robot_plot.canvas_time_evolution, "Evolução Temporal")
+            self.tabs.addTab(self.robot_plot.canvas_errors, "Erros")
+            # layout.addWidget(self.robot_plot)
         except Exception as e:
             error_label = QLabel(f"Erro: {str(e)}")
             error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(error_label)
+        
+        # Adicionar às Abas
+        layout.addWidget(self.tabs)
         
         return panel
 
@@ -444,6 +425,7 @@ class RobotControlInterface(QMainWindow):
             self.speed_slider.valueChanged.connect(self.update_speed)
             self.use_controller.clicked.connect(self.update_controller)
             self.radio_joint.toggled.connect(self.update_position_labels)
+            self.btn_send_to_robot.clicked.connect(self.send_to_robot)
 
             # Entradas dados: Atualização dos dados (tempo real): textChanged
             self.initial_q1.textChanged.connect(self.update_coordenate_system)
@@ -684,15 +666,18 @@ class RobotControlInterface(QMainWindow):
         # Dados
         x0, y0, z0 = self.pos0
         xf, yf, zf = self.posf
+
+        # Raio e Hiputenusa
         r0 = np.sqrt(x0**2 + y0**2)
         rf = np.sqrt(xf**2 + yf**2) 
+        h0 = np.sqrt(x0**2 + y0**2 + (z0-self.robot.L1)**2)
+        hf = np.sqrt(xf**2 + yf**2 + (zf-self.robot.L1)**2)
 
         # Limites físicos
         r_min, r_max = self.robot.r_min, self.robot.r_max
-        z0_min, z0_max = self.robot.calc_Zrange(r0)
-        zf_min, zf_max = self.robot.calc_Zrange(rf)
+        h_min, h_max = self.robot.h_min, self.robot.h_max
 
-        # --- [Validação]: R [(R_MIN <= R <= R_MAX)] & Z [(Z_MIN < Z < Z_MAX)] ---
+        # --- [Validação]: R [(R_MIN <= R <= R_MAX)] ---
         # Validar R inicial
         if r0 < r_min or r0 > r_max:
             all_valid = False
@@ -722,32 +707,57 @@ class RobotControlInterface(QMainWindow):
             self.initial_d3.setStyleSheet(self.normal_style)
             self.final_d3.setStyleSheet(self.normal_style)
             return False
-        
+
+        # --- [Validação]: Z [(H_MIN <= H <= H_MAX)] & Z [(Z_MIN(i) < Z < Z_MAX(i))] ---
+        # Limites físicos (não mudar de posição no código)
+        z0_vec = np.sort(self.robot.calc_Zrange(r0))
+        zf_vec = np.sort(self.robot.calc_Zrange(rf))
+
         # Validar Z inicial
-        if z0_min is None:
+        if z0_vec is None:
             all_valid = False
         else:
-            if z0 < z0_min or z0 > z0_max:
+            if h0 < h_min or h0 > h_max:
                 all_valid = False
                 self.initial_d3.setStyleSheet(self.error_style)
                 if block: 
-                    QMessageBox.warning(self, "Limite Físico", f"Z inicial (RZ): {z0_min:.2f} a {z0_max:.2f} m")
+                    QMessageBox.warning(self, "Limite Físico", f"Z inicial (RZ) fora do range")
                     return False
             else:
-                self.initial_d3.setStyleSheet(self.normal_style)
-        
+                idx_sep_z0 = np.argmax(np.diff(z0_vec)) + 1
+                z0_lesser = z0_vec[:idx_sep_z0]
+                z0_greater = z0_vec[idx_sep_z0:]
+                if z0 < np.min(z0_lesser) or (z0 > np.max(z0_lesser) and z0 < np.min(z0_greater)) or z0 > np.max(z0_greater):
+                    all_valid = False
+                    self.initial_d3.setStyleSheet(self.error_style)
+                    if block: 
+                        QMessageBox.warning(self, "Limite Físico", f"Z inicial (RZ) fora do range")
+                        return False
+                else:
+                    self.initial_d3.setStyleSheet(self.normal_style)
+            
         # Validar Z final
-        if zf_min is None:
+        if zf_vec is None:
             all_valid = False
         else:
-            if zf < zf_min or zf > zf_max:
+            if hf < h_min or h0 > h_max:
                 all_valid = False
                 self.final_d3.setStyleSheet(self.error_style)
                 if block: 
-                    QMessageBox.warning(self, "Limite Físico", f"Z final (RZ): {zf_min:.2f} a {zf_max:.2f} m")
+                    QMessageBox.warning(self, "Limite Físico", f"Z inicial (RZ) fora do range")
                     return False
             else:
-                self.final_d3.setStyleSheet(self.normal_style)
+                idx_sep_zf = np.argmax(np.diff(zf_vec)) + 1
+                zf_lesser = zf_vec[:idx_sep_zf]
+                zf_greater = zf_vec[idx_sep_zf:]
+                if zf < np.min(zf_lesser) or (zf > np.max(zf_lesser) and zf < np.min(zf_greater)) or zf > np.max(zf_greater):
+                    all_valid = False
+                    self.final_d3.setStyleSheet(self.error_style)
+                    if block: 
+                        QMessageBox.warning(self, "Limite Físico", f"Z inicial (RZ) fora do range")
+                        return False
+                else:
+                    self.final_d3.setStyleSheet(self.normal_style)
         
         return all_valid
 
@@ -903,6 +913,9 @@ class RobotControlInterface(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao {action.lower()} simulação: {str(e)}")
     
+    def send_to_robot(self):
+        pass
+
     """
     =================================================================================================================
                                                 2) Funções de Update (Tempo real)
@@ -1069,7 +1082,7 @@ class RobotControlInterface(QMainWindow):
             if hasattr(self, 'robot_plot'):
                 self.robot_plot.set_target_position(*self.posf)
                 if self.radio_cartesian.isChecked():
-                    self.robot_plot.set_cartesian_positionining_liens(self.pos0, self.posf)
+                    self.robot_plot.set_cartesian_positionining_liens(self.pos0, self.posf) # Aqui
                 elif self.radio_joint.isChecked():
                     self.robot_plot.set_joint_positionining_liens(self.q0, self.qf)
         

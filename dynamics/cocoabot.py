@@ -72,14 +72,14 @@ class CocoaBot:
         q2 = np.linspace(*self.J2_range, 100)
 
         # Hipotenusa mínima e máxima (Elo 2)
-        h_min = self.L2
-        h_max = self.L2 + self.d3_max
+        self.h_min = self.L2
+        self.h_max = self.L2 + self.d3_max
         
         # Coordenada radial e coordenada Z
-        self.r_inner = np.array(h_min * np.sin(q2))
-        self.r_outer = np.array(h_max * np.sin(q2))
-        self.z_inner = np.array(self.L1 - h_min * np.cos(q2))
-        self.z_outer = np.array(self.L1 - h_max * np.cos(q2))
+        self.r_inner = np.array(self.h_min * np.sin(q2))
+        self.r_outer = np.array(self.h_max * np.sin(q2))
+        self.z_inner = np.array(self.L1 - self.h_min * np.cos(q2))
+        self.z_outer = np.array(self.L1 - self.h_max * np.cos(q2))
 
         # Alcance radial mínimo e máximo no plano XY
         self.r_min = np.min(self.r_inner)
@@ -94,7 +94,7 @@ class CocoaBot:
     """--------------------------- Range de Z em função de R ---------------------------"""
     def calc_Zrange(self, r):
         # Range de movimentação: q2
-        q2 = np.linspace(*self.J2_range, 100)
+        q2 = np.linspace(*self.J2_range, 200)
         sin_q2 = np.sin(q2)
 
         # Validação numérica
@@ -106,13 +106,11 @@ class CocoaBot:
         # Validação limites físicos
         valid = valid_sin & (d3 >= 0) & (d3 <= self.d3_max)
         if not np.any(valid):
-            return None, None
+            return None
         
-        # Range de Z
+        # Range de Z ddd
         z = self.L1 - (self.L2 + d3[valid]) * np.cos(q2[valid])
-        z_min = np.min(z)
-        z_max = np.max(z)
-        return z_min, z_max
+        return z
 
     """
     =================================================================================================================
