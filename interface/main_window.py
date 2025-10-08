@@ -72,7 +72,7 @@ class RobotControlInterface(QMainWindow):
         self.normal_style = ""
         
         # Coloar o robô na posição de início
-        self.update_robot_position(self.initial_t, self.default_q1, self.default_q2, self.default_d3)
+        self.robot_plot.update_robot_position(self.default_q1, self.default_q2, self.default_d3)    # self.initial_t, 
         self.update_trajectory_params()
         self.update_coordenate_system()
 
@@ -380,13 +380,6 @@ class RobotControlInterface(QMainWindow):
         layout = QVBoxLayout(panel)
         # layout.setContentsMargins(5, 5, 5, 5)
         
-        # Título                                            # (Linha 0): "Visualização"
-        # title = QLabel("Visualização")
-        # title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        # title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # title.setStyleSheet("QLabel { color: #2E7D32; padding: 10px; }")
-        # layout.addWidget(title)
-        
         # Abas/Tabs
         self.tabs = QTabWidget()
         
@@ -397,7 +390,7 @@ class RobotControlInterface(QMainWindow):
             self.tabs.addTab(self.robot_plot.canvas_positioning, "Posicionamento")
             self.tabs.addTab(self.robot_plot.canvas_time_evolution, "Evolução Temporal")
             self.tabs.addTab(self.robot_plot.canvas_errors, "Erros")
-            # layout.addWidget(self.robot_plot)
+            self.tabs.addTab(self.robot_plot.canvas_forces, "Forças|Torques")
         except Exception as e:
             error_label = QLabel(f"Erro: {str(e)}")
             error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -773,6 +766,8 @@ class RobotControlInterface(QMainWindow):
             self.radio_joint.setEnabled(not enable)
             self.radio_cartesian.setEnabled(not enable)
             self.enable_position_buttons(not enable)
+            self.duration_field.setEnabled(not enable)
+            self.dt_field.setEnabled(not enable)
 
     """--------------------------- (Des)Habilita Botões de Posição ---------------------------"""
     def enable_position_buttons(self, enable):
@@ -791,7 +786,8 @@ class RobotControlInterface(QMainWindow):
             if hasattr(self, 'robot_plot'):
                 self.robot_plot.update_robot_position(*self.q0)     # Voltar o robô pra posição inicial
                 self.robot_plot.reset_position_graph()
-                self.robot_plot.reset_trajectory()  
+                self.robot_plot.reset_trajectory()
+                self.robot_plot.reset_positioning_lines()
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao limpar a interface: {str(e)}")
     
@@ -811,18 +807,10 @@ class RobotControlInterface(QMainWindow):
             # Gera a Trajetória: trajectory = [(t, q_t, qd_t, qdd_t), (...)]
             self.trajectory = self.trajectory_gen.generate_trajectory(self.q0, self.qf, self.tf, self.dt)
             
-            # Calcula todas as posições (x,y,z)
-            trajectory_points = []
-            for _, q_joints, _, _ in self.trajectory:
-                pos = self.robot.forward_kinematics(*q_joints)  # q -> pos(x,y,z)
-                trajectory_points.append(pos)
-
             # [Update plot]: posiciona o robô, adiciona a Trajetória Completa e a Posição Final nos plots
             if hasattr(self, 'robot_plot'):
-                self.robot_plot.update_robot_position(*self.q0)
-                self.robot_plot.reset_position_graph()                              # Reseta o plot q(t)
-                self.robot_plot.reset_positioning_lines()
-                self.robot_plot.set_trajectory(self.trajectory, trajectory_points)  # Adiciona a Trajetória Completa
+                self.clear_interface()
+                self.robot_plot.set_trajectory(self.trajectory)                     # Adiciona a Trajetória Completa
                 self.robot_plot.set_target_position(*self.posf)                     # Adiciona a Posição Final
             
             # Ativa o Botão de "Simular"
@@ -879,18 +867,10 @@ class RobotControlInterface(QMainWindow):
         """Parar simulação"""
         try:
             self.simulation_thread.stop()                                   # Cancelamento da Simulation_Thread
-            self.simulation_thread.wait(1000)
-            self.update_status("Simulação parada")
-            self.robot_plot.update_robot_position(*self.q0)              # Voltar o robô pra posição inicial
-            self.robot_plot.reset_position_graph()
-            self.robot_plot.reset_trajectory()                              # Tirar as linhas de trajetória
-            if self.radio_cartesian.isChecked():
-                self.robot_plot.set_cartesian_positionining_liens(self.pos0, self.posf)
-            elif self.radio_joint.isChecked():
-                self.robot_plot.set_joint_positionining_liens(self.q0, self.qf)
-            self.robot_plot.set_target_position(*self.posf)
-            self.trajectory = None
+            QTimer.singleShot(1000, lambda: self.update_status("Simulação parada"))
+            self.update_coordenate_system()
             self.enable_simulation_buttons(False)
+            self.trajectory = None
 
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao parar simulação: {str(e)}")
@@ -913,6 +893,7 @@ class RobotControlInterface(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao {action.lower()} simulação: {str(e)}")
     
+    """--------------------------- 1.6) Funções de Controle -> Enviar para o Robô ---------------------------"""
     def send_to_robot(self):
         pass
 
@@ -946,13 +927,12 @@ class RobotControlInterface(QMainWindow):
             print(f"Erro ao atualizar controlador: {e}")
     
     """--------------------------- 2.3) Funções de Update -> Posição e Trajetória das juntas ---------------------------"""
-    def update_robot_position(self, t, q1, q2, d3):
+    def update_robot_position(self, t, q, qd, qdd, e, ed, edd, tau):
         """Atualizar gráficos de posição"""                                     # [sinal]: <- simulation_thread.position_updated
         try:
             if hasattr(self, 'robot_plot'):
-                self.robot_plot.update_robot_position(q1, q2, d3)               # [update]: -> robot_plot.update_robot_position() [plot: 3d, xy, rz]
-                self.robot_plot.update_position_graph(t, q1, q2, d3)            # [update]: -> robot_plot.update_position_graph() [plot: posicao da junta x tempo]
-            self.current_t, self.current_q1, self.current_q2, self.current_d3 = t, q1, q2, d3
+                self.robot_plot.update_robot_position(*q)                               # [update]: -> robot_plot.update_robot_position() [plot: 3d, xy, rz]
+                self.robot_plot.update_time_evolution(t, q, qd, qdd, e, ed, edd, tau)   # [update]: -> robot_plot.update_time_evolution() [plot: posicao da junta x tempo]
         except Exception as e:
             print(f"Erro ao atualizar posição: {e}")
     
@@ -1082,9 +1062,9 @@ class RobotControlInterface(QMainWindow):
             if hasattr(self, 'robot_plot'):
                 self.robot_plot.set_target_position(*self.posf)
                 if self.radio_cartesian.isChecked():
-                    self.robot_plot.set_cartesian_positionining_liens(self.pos0, self.posf) # Aqui
+                    self.robot_plot.set_cartesian_positionining_lines(self.pos0, self.posf)
                 elif self.radio_joint.isChecked():
-                    self.robot_plot.set_joint_positionining_liens(self.q0, self.qf)
+                    self.robot_plot.set_joint_positionining_lines(self.q0, self.qf)
         
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro na transformação do sistema de coordenada: {str(e)}")

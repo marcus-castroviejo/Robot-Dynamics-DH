@@ -28,7 +28,7 @@ class SimulationThread(QThread):
 
     """--------------------------- Sinais de Atualização (update) ---------------------------"""
     # Esses sinais vão para a MainWindow (thread principal), onde ativam funções para atualizar a interface
-    position_updated = pyqtSignal(float, float, float, float)   # Emite sinal: (t, q1, q2, d3)      # Chama update_robot_position([qi]) e update_position_graph(t, [qi])
+    position_updated = pyqtSignal(float, list, list, list, list, list, list, list)   # Emite sinal: (t, q1, q2, d3)      # Chama update_robot_position([qi]) e update_time_evolution(t, [qi])
     status_updated = pyqtSignal(str)                            # Emite sinal: mensagens            # Chama update_status("text")
     progress_updated = pyqtSignal(int)                          # Emite sinal: progresso [0-100]    # Chama update_progress(x)
     
@@ -90,13 +90,12 @@ class SimulationThread(QThread):
                 
                 # Controlador
                 if self.controller:
-                    errors, q_joints, qd_joints, qdd_joints, tau = self.controller.update_control_position()
+                    q_joints, qd_joints, qdd_joints, e_pos, e_vel, e_acc, tau = self.controller.update_control_position()
                 else:
-                    errors, q_joints, qd_joints, qdd_joints, tau = 0.0, q_traj, qd_traj, qdd_traj, 0.0
+                    q_joints, qd_joints, qdd_joints, e_pos, e_vel, e_acc, tau = q_traj, qd_traj, qdd_traj, 0.0, 0.0, 0.0, 0.0
                 
                 # Atualizar a posição das juntas
-                q1, q2, d3 = q_joints
-                self.position_updated.emit(float(t), float(q1), float(q2), float(d3))
+                self.position_updated.emit(float(t), q_joints, qd_joints, qdd_joints, e_pos, e_vel, e_acc, tau)
                 
                 # Atualizar progresso
                 progress = int((i + 1) / total_points * 100)

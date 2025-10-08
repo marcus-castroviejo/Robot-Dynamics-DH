@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.patches import Wedge
-import matplotlib.gridspec as gridspec
+from matplotlib.gridspec import GridSpec
 from PyQt6.QtWidgets import QWidget
 
 
@@ -40,10 +40,6 @@ class RobotPlot(QWidget):
             self.setup_plots()              # Configura: posição, title, labels, limits, grid, ...
             self.init_plot_lines()          # Inicializa as linhas dos plots
             self.plot_workspace_views()     # Desenha o Workspace            
-            # Tight Layout
-            self.fig_positioning.tight_layout()
-            self.fig_time_evolution.tight_layout()
-            self.fig_errors.tight_layout()
         except Exception as e:
             print(f"Erro ao inicializar plot: {e}")
     
@@ -59,21 +55,24 @@ class RobotPlot(QWidget):
         self.fig_positioning = Figure(figsize=(12, 8))
         self.fig_time_evolution = Figure(figsize=(12, 8))
         self.fig_errors = Figure(figsize=(12, 8))
+        self.fig_forces = Figure(figsize=(12, 8))
+
+        self.fig_positioning.suptitle("Posicionamento")
+        self.fig_time_evolution.suptitle("Evolução Temporal")
+        self.fig_errors.suptitle("Erros")
+        self.fig_forces.suptitle("Forças|Torques")
 
         # Criar os Canvas (Widget com Plots)
         self.canvas_positioning = FigureCanvas(self.fig_positioning)
         self.canvas_time_evolution = FigureCanvas(self.fig_time_evolution)
         self.canvas_errors = FigureCanvas(self.fig_errors)
+        self.canvas_forces = FigureCanvas(self.fig_forces)
         
         # É necessário adicionar o parent
         self.canvas_positioning.setParent(self)
         self.canvas_time_evolution.setParent(self)
         self.canvas_errors.setParent(self)
-
-        # Tight Layout
-        self.fig_positioning.tight_layout()
-        self.fig_time_evolution.tight_layout()
-        self.fig_errors.tight_layout()
+        self.canvas_forces.setParent(self)
 
     """--------------------------- Inicialização dos Dados Temporais ---------------------------"""
     def initialize_data(self):
@@ -84,135 +83,94 @@ class RobotPlot(QWidget):
         self.error_q_data = [[], [], []]
         self.error_qd_data = [[], [], []]
         self.error_qdd_data = [[], [], []]
+        self.tau_data = [[], [], []]
     
     """--------------------------- Configuração dos Plots ---------------------------"""
     def setup_plots(self):
         self.setup_positioning_plots()
         self.setup_time_evolution_plots()
         self.setup_errors_plots()
+        self.setup_forces_plots()
 
     """--------------------------- Configuração dos Plots: Positioning Plots ---------------------------"""
     def setup_positioning_plots(self):
-        """Configurar os subplots"""
-        # Plot 3D principal
-        gs = gridspec.GridSpec(nrows=2, ncols=2, width_ratios=[2, 1])
-        # self.ax_3d = self.fig_positioning.add_subplot(221, projection='3d')
-        self.ax_3d = self.fig_positioning.add_subplot(gs[:,0], projection='3d')
-        self.ax_3d.set_xlim(-1, 1)
-        self.ax_3d.set_ylim(-1, 1)
-        self.ax_3d.set_zlim(0, 1.5)
-        self.ax_3d.set_xlabel('X (m)')
-        self.ax_3d.set_ylabel('Y (m)')
-        self.ax_3d.set_zlabel('Z (m)')
-        self.ax_3d.set_title('Vista 3D')
+        """Configurar os plots de posicionamento"""
+        # GridSpec
+        gs = GridSpec(nrows=2, ncols=2, left=0.10, right=0.9, top=0.90, bottom=0.08, hspace=0.3, wspace=0.2, width_ratios=[2, 3])
+        
+        # Plot 3D
+        self.ax_3d = self.fig_positioning.add_subplot(gs[:,1], projection='3d')
+        self.ax_3d.set(xlim=(-1, 1), ylim=(-1, 1), zlim=(0, 1.5), xlabel='X (m)', ylabel='Y (m)', zlabel='Z (m)', title='Vista 3D')
         
         # Plot XY (vista superior)
-        # self.ax_xy = self.fig_positioning.add_subplot(222)
-        self.ax_xy = self.fig_positioning.add_subplot(gs[0,1])
-        self.ax_xy.set_xlim(-1, 1)
-        self.ax_xy.set_ylim(-1, 1)
-        self.ax_xy.set_xlabel('X (m)')
-        self.ax_xy.set_ylabel('Y (m)')
-        self.ax_xy.set_title('Vista Superior (XY)')
-        self.ax_xy.grid(True, alpha=0.3)
-        self.ax_xy.set_aspect('equal')  # deixa os eixos em mesma proporção
-        
-        # Posição das Juntas (q(t))
-        # self.ax_position = self.fig_positioning.add_subplot(223)
-        # self.ax_position = self.fig_positioning.add_subplot(gs[1,0])
-        # self.ax_position.set_xlim(0, 1)
-        # self.ax_position.set_ylim(-5, 165)
-        # self.ax_position.set_xlabel('Tempo (s)')
-        # self.ax_position.set_ylabel('Posição')
-        # self.ax_position.set_title('Posição das Juntas vs Tempo')
-        # self.ax_position.grid(True, alpha=0.3)
+        self.ax_xy = self.fig_positioning.add_subplot(gs[0,0])
+        self.ax_xy.set(xlim=(-1, 1), ylim=(-1, 1), xlabel='X (m)', ylabel='Y (m)', title='Vista Superior (XY)', aspect=True)
+        self.ax_xy.grid(True, alpha=.3)
 
         # Plot RZ (Vista Lateral)
-        # self.ax_rz = self.fig_positioning.add_subplot(224)
-        self.ax_rz = self.fig_positioning.add_subplot(gs[1,1])
-        self.ax_rz.set_xlim(-.6, .8)
-        self.ax_rz.set_ylim(-0.2, 1.2)
-        self.ax_rz.set_xlabel('Distância do centro (m)')
-        self.ax_rz.set_ylabel('Z (m)')
-        self.ax_rz.set_title('Vista Lateral (RZ)')
-        self.ax_rz.grid(True, alpha=0.3)
-        self.ax_rz.set_aspect('equal')
+        self.ax_rz = self.fig_positioning.add_subplot(gs[1,0])
+        self.ax_rz.set(xlim=(-0.6, 0.8), ylim=(-0.2, 1.2), xlabel='Distância do centro R (m)', ylabel='Z (m)', title='Vista Lateral (RZ)', aspect=True)
+        self.ax_rz.grid(True, alpha=.3)
 
     """--------------------------- Configuração dos Plots: Time Evolution Plots ---------------------------"""
     def setup_time_evolution_plots(self):
         """Configurar plots de evolução temporal das juntas"""
+        # GridSpec
+        gs = GridSpec(nrows=3, ncols=1, left=0.10, right=0.95, top=0.90, bottom=0.08, hspace=0.32)
+        
         # Plot de posição q(t)
-        self.ax_position = self.fig_time_evolution.add_subplot(311)
-        self.ax_position.set_xlim(0, 1)
-        self.ax_position.set_ylim(-5, 165)
-        self.ax_position.set_xlabel('Tempo (s)')
-        self.ax_position.set_ylabel('Posição')
-        self.ax_position.set_title('Posição das Juntas vs Tempo')
-        self.ax_position.grid(True, alpha=0.3)
+        self.ax_position = self.fig_time_evolution.add_subplot(gs[0,0])
+        self.ax_position.set(xlim=(0,1), ylim=(-1,1), ylabel='Posição', title='Posição das Juntas vs Tempo')
+        self.ax_position.grid(True, alpha=.3)
         
-        # Plot de velocidade qd(t) - NOVO
-        self.ax_velocity = self.fig_time_evolution.add_subplot(312)
-        self.ax_velocity.set_xlim(0, 1)
-        self.ax_velocity.set_ylim(-50, 50)  # Ajustar conforme necessário
-        self.ax_velocity.set_xlabel('Tempo (s)')
-        self.ax_velocity.set_ylabel('Velocidade')
-        self.ax_velocity.set_title('Velocidade das Juntas vs Tempo')
-        self.ax_velocity.grid(True, alpha=0.3)
+        # Plot de velocidade qd(t)
+        self.ax_velocity = self.fig_time_evolution.add_subplot(gs[1,0])
+        self.ax_velocity.set(xlim=(0,1), ylim=(-1,1), ylabel='Velocidade', title='Velocidade das Juntas vs Tempo')
+        self.ax_velocity.grid(True, alpha=.3)
         
-        # Plot de aceleração qdd(t) - NOVO
-        self.ax_acceleration = self.fig_time_evolution.add_subplot(313)
-        self.ax_acceleration.set_xlim(0, 1)
-        self.ax_acceleration.set_ylim(-100, 100)  # Ajustar conforme necessário
-        self.ax_acceleration.set_xlabel('Tempo (s)')
-        self.ax_acceleration.set_ylabel('Aceleração')
-        self.ax_acceleration.set_title('Aceleração das Juntas vs Tempo')
-        self.ax_acceleration.grid(True, alpha=0.3)
-        # pass
+        # Plot de aceleração qdd(t)
+        self.ax_acceleration = self.fig_time_evolution.add_subplot(gs[2,0])
+        self.ax_acceleration.set(xlim=(0,1), ylim=(-1,1), xlabel='Tempo (s)', ylabel='Aceleração', title='Aceleração das Juntas vs Tempo')
+        self.ax_acceleration.grid(True, alpha=.3)
 
     """--------------------------- Configuração dos Plots: Errors Plots ---------------------------"""
     def setup_errors_plots(self):
         """Configurar plots de erros"""
-        # gs = gridspec.GridSpec(nrows=3, ncols=2, width_ratios=[1, 2], height_ratios=[1, 1])
-        # Positioning:
-        # ax_positioning = self.fig_errors.add_subplot(gs[:,0], projection='3d')
+        # GridSpec
+        gs = GridSpec(nrows=3, ncols=1, left=0.10, right=0.95, top=0.90, bottom=0.08, hspace=0.32)
         
         # Erro de posição
-        self.ax_error_q = self.fig_errors.add_subplot(311)
-        # self.ax_error_q = self.fig_errors.add_subplot(gs[0,1])
-        self.ax_error_q.set_xlim(0, 1)
-        self.ax_error_q.set_ylim(-10, 10)
-        self.ax_error_q.set_xlabel('Tempo (s)')
-        self.ax_error_q.set_ylabel('Erro de Posição')
-        self.ax_error_q.set_title('Erro de Posição vs Tempo')
-        self.ax_error_q.grid(True, alpha=0.3)
+        self.ax_error_q = self.fig_errors.add_subplot(gs[0,0])
+        self.ax_error_q.set(xlim=(0,1), ylim=(-1,1), ylabel='Erro de Posição', title='Erro de Posição vs Tempo')
+        self.ax_error_q.grid(True, alpha=.3)
         
         # Erro de velocidade
-        self.ax_error_qd = self.fig_errors.add_subplot(312)
-        # self.ax_error_qd = self.fig_errors.add_subplot(gs[1,1])
-        self.ax_error_qd.set_xlim(0, 1)
-        self.ax_error_qd.set_ylim(-5, 5)
-        self.ax_error_qd.set_xlabel('Tempo (s)')
-        self.ax_error_qd.set_ylabel('Erro de Velocidade')
-        self.ax_error_qd.set_title('Erro de Velocidade vs Tempo')
-        self.ax_error_qd.grid(True, alpha=0.3)
+        self.ax_error_qd = self.fig_errors.add_subplot(gs[1,0])
+        self.ax_error_qd.set(xlim=(0,1), ylim=(-1,1), ylabel='Erro de Velocidade', title='Erro de Velocidade vs Tempo')
+        self.ax_error_qd.grid(True, alpha=.3)
         
         # Erro de aceleração
-        self.ax_error_qdd = self.fig_errors.add_subplot(313)
-        # self.ax_error_qdd = self.fig_errors.add_subplot(gs[2,1])
-        self.ax_error_qdd.set_xlim(0, 1)
-        self.ax_error_qdd.set_ylim(-20, 20)
-        self.ax_error_qdd.set_xlabel('Tempo (s)')
-        self.ax_error_qdd.set_ylabel('Erro de Aceleração')
-        self.ax_error_qdd.set_title('Erro de Aceleração vs Tempo')
-        self.ax_error_qdd.grid(True, alpha=0.3)
+        self.ax_error_qdd = self.fig_errors.add_subplot(gs[2,0])
+        self.ax_error_qdd.set(xlim=(0,1), ylim=(-1,1), xlabel='Tempo (s)', ylabel='Erro de Aceleração', title='Erro de Aceleração vs Tempo')
+        self.ax_error_qdd.grid(True, alpha=.3)
 
-        pass
+    """--------------------------- Configuração dos Plots: Forces Plots ---------------------------"""
+    def setup_forces_plots(self):
+        """Configurar plots de Forças|Torques"""
+        # GridSpec
+        gs = GridSpec(nrows=1, ncols=1, left=0.10, right=0.95, top=0.90, bottom=0.08, hspace=0.32)
+        
+        # Forças|Torques
+        self.ax_forces = self.fig_forces.add_subplot(gs[0,0])
+        self.ax_forces.set(xlim=(0,1), ylim=(-1,1), xlabel='Tempo (s)', ylabel='Força|Torque', title='Força|Torque vs Tempo')
+        self.ax_forces.grid(True, alpha=.3)
 
     """--------------------------- Configuração das Linhas ---------------------------"""
     def init_plot_lines(self):
         self.init_positioning_lines()
         self.init_time_evolution_lines()
         self.init_errors_lines()
+        self.init_forces_lines()
 
     """--------------------------- Configuração das Linhas: Positioning Plots ---------------------------"""
     def init_positioning_lines(self):
@@ -229,26 +187,11 @@ class RobotPlot(QWidget):
         self.robot_target_line_3d, = self.ax_3d.plot([], [], [], 'g-o', alpha=0.7, linewidth=3, markersize=8, zorder=-1, label='Alvo')
         self.robot_target_line_xy, = self.ax_xy.plot([], [], 'g-o', alpha=0.7, linewidth=3, markersize=8, zorder=-1, label='Alvo')
         self.robot_target_line_rz, = self.ax_rz.plot([], [], 'g-o', alpha=0.7, linewidth=3, markersize=8, zorder=-1, label='Alvo')
-        
-        # Target (ponto verde)
-        # self.target_3d, = self.ax_3d.plot([], [], [], 'go', markersize=8, label='Alvo')
-        # self.target_xy, = self.ax_xy.plot([], [], 'go', markersize=8, label='Alvo')
-        # self.target_rz, = self.ax_rz.plot([], [], 'go', markersize=8, label='Alvo')
 
         # Trajetória (linha preta pontilhada)
-        self.traj_line_3d, = self.ax_3d.plot([], [], [], 'k:', alpha=0.7, label='Trajetória')
-        self.traj_line_xy, = self.ax_xy.plot([], [], 'k:', alpha=0.7, label='Trajetória')
-        self.traj_line_rz, = self.ax_rz.plot([], [], 'k:', alpha=0.7, label='Trajetória')
-        
-        # # Trajetória (plot de posição q(t))
-        # self.traj_line_q1, = self.ax_position.plot([], [], 'b:', alpha=0.7, label='$q_1^{ref}(t)$ [deg]')
-        # self.traj_line_q2, = self.ax_position.plot([], [], 'r:', alpha=0.7, label='$q_2^{ref}(t)$ [deg]')
-        # self.traj_line_q3, = self.ax_position.plot([], [], 'g:', alpha=0.7, label='$q_3^{ref}(t)$ [mm]')
-        
-        # Linhas do Plot das Juntas
-        self.q1_line, = self.ax_position.plot([], [], 'b-', linewidth=2, label='$q_1(t)$ [deg]')
-        self.q2_line, = self.ax_position.plot([], [], 'r-', linewidth=2, label='$q_2(t)$ [deg]') 
-        self.q3_line, = self.ax_position.plot([], [], 'g-', linewidth=2, label='$q_3(t)$ [mm]')
+        self.traj_line_3d, = self.ax_3d.plot([], [], [], 'k:', alpha=0.7, zorder=-2, label='Trajetória')
+        self.traj_line_xy, = self.ax_xy.plot([], [], 'k:', alpha=0.7, zorder=-2, label='Trajetória')
+        self.traj_line_rz, = self.ax_rz.plot([], [], 'k:', alpha=0.7, zorder=-2, label='Trajetória')
 
         # Linhas de Posicionamento (cartesiano)
         self.x_intial_line, = self.ax_xy.plot([], [], 'b-', alpha=0.5, linewidth=1)
@@ -271,7 +214,6 @@ class RobotPlot(QWidget):
         # Adicionar legendas
         # self.ax_xy.legend()
         self.ax_rz.legend()
-        self.ax_position.legend()
     
     """--------------------------- Configuração das Linhas: Time Evolution Plots ---------------------------"""
     def init_time_evolution_lines(self):
@@ -280,28 +222,33 @@ class RobotPlot(QWidget):
         self.q1_line, = self.ax_position.plot([], [], 'b-', linewidth=2, label=r'$q_1(t)$')
         self.q2_line, = self.ax_position.plot([], [], 'r-', linewidth=2, label=r'$q_2(t)$')
         self.q3_line, = self.ax_position.plot([], [], 'g-', linewidth=2, label=r'$q_3(t)$')
-        
         # Trajetória (plot de posição q(t))
-        self.traj_line_q1, = self.ax_position.plot([], [], 'b:', alpha=0.7, label=r'$q_1^{ref}(t)$ [deg]')
-        self.traj_line_q2, = self.ax_position.plot([], [], 'r:', alpha=0.7, label=r'$q_2^{ref}(t)$ [deg]')
-        self.traj_line_q3, = self.ax_position.plot([], [], 'g:', alpha=0.7, label=r'$q_3^{ref}(t)$ [mm]')
+        self.traj_line_q1, = self.ax_position.plot([], [], 'b:', alpha=0.7, label=r'$q_1^{ref}(t)$')
+        self.traj_line_q2, = self.ax_position.plot([], [], 'r:', alpha=0.7, label=r'$q_2^{ref}(t)$')
+        self.traj_line_q3, = self.ax_position.plot([], [], 'g:', alpha=0.7, label=r'$q_3^{ref}(t)$')
         
         # Velocidade
         self.qd1_line, = self.ax_velocity.plot([], [], 'b-', linewidth=2, label=r'$\dot{q}_1(t)$')
         self.qd2_line, = self.ax_velocity.plot([], [], 'r-', linewidth=2, label=r'$\dot{q}_2(t)$')
         self.qd3_line, = self.ax_velocity.plot([], [], 'g-', linewidth=2, label=r'$\dot{q}_3(t)$')
-        
+        # Trajetória (plot de velocidade qd(t))
+        self.traj_line_qd1, = self.ax_velocity.plot([], [], 'b:', alpha=0.7, label=r'$\dot{q}_1^{ref}(t)$')
+        self.traj_line_qd2, = self.ax_velocity.plot([], [], 'r:', alpha=0.7, label=r'$\dot{q}_2^{ref}(t)$')
+        self.traj_line_qd3, = self.ax_velocity.plot([], [], 'g:', alpha=0.7, label=r'$\dot{q}_3^{ref}(t)$')
+
         # Aceleração
         self.qdd1_line, = self.ax_acceleration.plot([], [], 'b-', linewidth=2, label=r'$\ddot{q}_1(t)$')
         self.qdd2_line, = self.ax_acceleration.plot([], [], 'r-', linewidth=2, label=r'$\ddot{q}_2(t)$')
         self.qdd3_line, = self.ax_acceleration.plot([], [], 'g-', linewidth=2, label=r'$\ddot{q}_3(t)$')
+        # Trajetória (plot de aceleração qdd(t))
+        self.traj_line_qdd1, = self.ax_acceleration.plot([], [], 'b:', alpha=0.7, label=r'$\ddot{q}_1^{ref}(t)$')
+        self.traj_line_qdd2, = self.ax_acceleration.plot([], [], 'r:', alpha=0.7, label=r'$\ddot{q}_2^{ref}(t)$')
+        self.traj_line_qdd3, = self.ax_acceleration.plot([], [], 'g:', alpha=0.7, label=r'$\ddot{q}_3^{ref}(t)$')
 
         # Legendas
         self.ax_position.legend()
         self.ax_velocity.legend()
         self.ax_acceleration.legend()
-
-        pass
     
     """--------------------------- Configuração das Linhas: Errors Plots ---------------------------"""
     def init_errors_lines(self):
@@ -326,6 +273,17 @@ class RobotPlot(QWidget):
         self.ax_error_qd.legend()
         self.ax_error_qdd.legend()
     
+    """--------------------------- Configuração das Linhas: Forces Plots ---------------------------"""
+    def init_forces_lines(self):
+        """Inicializar linhas dos plots de Forças|Torques"""
+        # Forças e Torques
+        self.forces_q1_line, = self.ax_forces.plot([], [], 'b-', linewidth=2, label=r'$\tau_{q_1}(t)$')
+        self.forces_q2_line, = self.ax_forces.plot([], [], 'r-', linewidth=2, label=r'$\tau_{q_2}(t)$')
+        self.forces_q3_line, = self.ax_forces.plot([], [], 'g-', linewidth=2, label=r'$F_{q_3}(t)$')
+
+        # Legendas
+        self.ax_error_q.legend()
+
     """
     =================================================================================================================
                                                 Dados de Referência
@@ -370,31 +328,46 @@ class RobotPlot(QWidget):
             print(f"Erro ao plotar workspace: {e}")
 
     """--------------------------- Plotar a Trajetória desejada ---------------------------"""
-    def set_trajectory(self, trajectory, trajectory_points):
+    def set_trajectory(self, trajectory):
         """Plotar a trajetória desejada"""
         try:
-            if trajectory and trajectory_points:
-                # Trajectory
-                t = [ti for ti, _, _, _ in trajectory]
-                q_joints = [q_joint for _, q_joint, _, _ in trajectory]
-                q1 = [q1 for q1, _, _ in q_joints]
-                q2 = [q2 for _, q2, _ in q_joints]
-                q3 = [q3 for _, _, q3 in q_joints]
+            if trajectory:
+                # ------------- Trajetória temporal -------------
+                # Separar as variáveis
+                t, q_joints, qd_joints, qdd_joints = map(np.array, zip(*trajectory))    # Inteligentíssimo demais, obrigado Claude.AI :)
+                q_joints, qd_joints, qdd_joints = q_joints.T, qd_joints.T, qdd_joints.T
 
-                self.traj_line_q1.set_data(t, np.rad2deg(q1))
-                self.traj_line_q2.set_data(t, np.rad2deg(q2))
-                self.traj_line_q3.set_data(t, 1000.0*np.array(q3))
+                # Atualizar linhas de trajetória
+                traj_q_lines = [self.traj_line_q1, self.traj_line_q2, self.traj_line_q3]
+                traj_qd_lines = [self.traj_line_qd1, self.traj_line_qd2, self.traj_line_qd3]
+                traj_qdd_lines = [self.traj_line_qdd1, self.traj_line_qdd2, self.traj_line_qdd3]
+                for i in range(3):
+                    traj_q_lines[i].set_data(t, q_joints[i])
+                    traj_qd_lines[i].set_data(t, qd_joints[i])
+                    traj_qdd_lines[i].set_data(t, qdd_joints[i])
+                
+                # Conversão de unidades
+                # self.traj_line_q1.set_data(t, q1)   # np.rad2deg(q1)
+                # self.traj_line_q2.set_data(t, q2)   # np.rad2deg(q2)
+                # self.traj_line_q3.set_data(t, q3)   # 1000.0*np.array(q3)
 
-                # Position
-                x_coords = [point[0] for point in trajectory_points]
-                y_coords = [point[1] for point in trajectory_points]
-                z_coords = [point[2] for point in trajectory_points]
-                r_coords = [np.sqrt(point[0]**2 + point[1]**2) for point in trajectory_points]
+                # ------------- Posição -------------
+                # Calcula todas as posições: q -> (x,y,z)
+                trajectory_points = []
+                for q_joint in q_joints.T:
+                    pos = self.robot.forward_kinematics(*q_joint)
+                    trajectory_points.append(pos)
+                
+                x_coords, y_coords, z_coords = np.array(trajectory_points).T
+                r_coords = np.sqrt(x_coords**2 + y_coords**2)
                 
                 self.traj_line_3d.set_data_3d(x_coords, y_coords, z_coords)
                 self.traj_line_xy.set_data(x_coords, y_coords)
                 self.traj_line_rz.set_data(r_coords, z_coords)
+
+                # Redesenhar
                 self.canvas_positioning.draw()
+                self.canvas_time_evolution.draw()
                 
         except Exception as e:
             print(f"Erro ao atualizar trajetória: {e}")
@@ -404,10 +377,6 @@ class RobotPlot(QWidget):
         """Definir posição alvo"""
         try:
             r_target = np.sqrt(x**2 + y**2)
-            
-            # self.target_3d.set_data_3d([x], [y], [z])
-            # self.target_xy.set_data([x], [y])
-            # self.target_rz.set_data([r_target], [z])
             
             self.robot_target_line_xy.set_data([0, x], [0, y])
             self.robot_target_line_rz.set_data([0, r_target], [self.robot.L1, z])
@@ -461,7 +430,7 @@ class RobotPlot(QWidget):
         self.canvas_positioning.draw()
     
     """--------------------------- Linhas de posicionamento: Juntas ---------------------------"""
-    def set_joint_positionining_liens(self, q0, qf):
+    def set_joint_positionining_lines(self, q0, qf):
         # Reset
         self.reset_positioning_lines()
         self.ax_xy.add_patch(self.wedge_q1_initial)
@@ -516,15 +485,12 @@ class RobotPlot(QWidget):
     def update_robot_position(self, q1, q2, d3):
         """Atualizar posição do robô"""
         try:
-            positions = self.robot.get_joint_positions(q1, q2, d3)  # Pega a posição de cada junta, dado (q1, q2, q3)
-            
+            # Pega a posição de cada junta, dado (q1, q2, q3)  
+            positions = self.robot.get_joint_positions(q1, q2, d3)          
             # Preparar coordenadas
-            x_coords = [pos[0] for pos in positions]
-            y_coords = [pos[1] for pos in positions]
-            z_coords = [pos[2] for pos in positions]
-            
+            x_coords, y_coords, z_coords = np.array(positions).T
             # Para vista lateral, usar distância radial (no lugar de x e y)
-            r_coords = [np.sqrt(pos[0]**2 + pos[1]**2) for pos in positions]
+            r_coords = np.sqrt(x_coords**2 + y_coords**2)
             
             # Atualizar plots
             self.robot_line_3d.set_data_3d(x_coords, y_coords, z_coords)
@@ -538,68 +504,100 @@ class RobotPlot(QWidget):
             print(f"Erro ao atualizar posição: {e}")
     
     """--------------------------- Update da Posição Temporal ---------------------------"""
-    def update_position_graph(self, t, q1, q2, d3):
+    def update_time_evolution(self, t, q, qd, qdd, e, ed, edd, tau):
         """Atualizar gráfico de posição com novos dados"""
         try:
             # Adicionar novos pontos
             self.time_data.append(t)
-            self.q_data[0].append(q1)
-            self.q_data[1].append(q2)
-            self.q_data[2].append(d3)
-            # self.q1_data.append(q1)
-            # self.q2_data.append(q2)
-            # self.q3_data.append(d3)
+            for i in range(3):
+                self_datas = [self.q_data[i], self.qd_data[i], self.qdd_data[i], self.error_q_data[i], 
+                              self.error_qd_data[i], self.error_qdd_data[i], self.tau_data[i]]
+                datas = [q[i], qd[i], qdd[i], e[i], ed[i], edd[i], tau[i]]
+                for self_data, data in zip(self_datas, datas):
+                    self_data.append(data)
 
             # Conversão de unidade
-            q1_data = np.rad2deg(self.q_data[0])          # rad -> deg
-            q2_data = np.rad2deg(self.q_data[1])          # rad -> deg
-            q3_data = 1000*np.array(self.q_data[2])       # m -> mm
+            # q1_data = np.rad2deg(self.q_data[0])          # rad -> deg
+            # q2_data = np.rad2deg(self.q_data[1])          # rad -> deg
+            # q3_data = 1000*np.array(self.q_data[2])       # m -> mm
             
             # Atualizar linhas
-            self.q1_line.set_data(self.time_data, q1_data)
-            self.q2_line.set_data(self.time_data, q2_data)
-            self.q3_line.set_data(self.time_data, q3_data)
+            q_lines = [self.q1_line, self.q2_line, self.q3_line]
+            qd_lines = [self.qd1_line, self.qd2_line, self.qd3_line]
+            qdd_lines = [self.qdd1_line, self.qdd2_line, self.qdd3_line]
+            e_q_lines = [self.error_q1_line, self.error_q2_line, self.error_q3_line]
+            e_qd_lines = [self.error_qd1_line, self.error_qd2_line, self.error_qd3_line]
+            e_qdd_lines = [self.error_qdd1_line, self.error_qdd2_line, self.error_qdd3_line]
+            tau_lines = [self.forces_q1_line, self.forces_q2_line, self.forces_q3_line]
+
+            for i in range(3):
+                lines = [q_lines[i], qd_lines[i], qdd_lines[i], e_q_lines[i], e_qd_lines[i], e_qdd_lines[i], tau_lines[i]]
+                datas = [self.q_data[i], self.qd_data[i], self.qdd_data[i], self.error_q_data[i], 
+                         self.error_qd_data[i], self.error_qdd_data[i], self.tau_data[i]]
+                for line, data in zip(lines, datas):
+                    line.set_data(self.time_data, data)
             
             # Ajustar limites automaticamente
-            if self.time_data:
-                self.ax_position.set_xlim(0, max(self.time_data) + 0.5)
-                
-                # Calcular limites Y
-                all_data = list(q1_data) + list(q2_data) + list(q3_data)
-                if all_data:
-                    margin = 5
-                    y_min = min(all_data) - margin
-                    y_max = max(all_data) + margin
-                    self.ax_position.set_ylim(y_min, y_max)
+            axes = [self.ax_position, self.ax_velocity, self.ax_acceleration]
+            datas = [self.q_data, self.qd_data, self.qdd_data]
+            e_axes = [self.ax_error_q, self.ax_error_qd, self.ax_error_qdd]
+            e_datas = [self.error_q_data, self.error_qd_data, self.error_qdd_data]
+            tau_axes = [self.ax_forces]
+            tau_datas = [self.tau_data]
             
+            # Calcular limites Y
+            def get_yrange(data1, data2, data3, margin=1):
+                all_data = list(data1) + list(data2) + list(data3)
+                all_data = np.concatenate([data1, data2, data3]).flatten().tolist()
+                if all_data:
+                    y_min = np.min(all_data) - margin
+                    y_max = np.max(all_data) + margin
+                    return y_min, y_max
+            
+            # Atualiza os limites do plot
+            if self.time_data:
+                margins = 3*[.5] + [0.0002, 0.001, 0.02] + [0.05]
+                for ax, data, margin in zip(axes+e_axes+tau_axes, datas+e_datas+tau_datas, margins):
+                    ax.set_xlim(0, max(self.time_data) + 0.5)
+                    ax.set_ylim(*get_yrange(*data, margin=margin))
+
             # Redesenhar
-            # self.ax_position.figure.canvas.draw_idle()
-            # self.canvas_positioning.draw_idle()
             self.canvas_time_evolution.draw_idle()
+            self.canvas_errors.draw_idle()
+            self.canvas_forces.draw_idle()
             
         except Exception as e:
-            print(f"Erro ao atualizar gráfico de posição: {e}")
+            print(f"Erro ao atualizar gráfico de evolução temporal: {e}")
 
     """--------------------------- Reset da Posição Temporal ---------------------------"""
     def reset_position_graph(self):
         """Limpar dados do gráfico de Posição X Tempo"""
         try:
-            # self.time_data.clear()
-            # self.q_data.clear()
-            # self.q1_data.clear()
-            # self.q2_data.clear()
-            # self.q3_data.clear()
+            # Limpar dados temporais
             self.initialize_data()
 
             # Limpar linhas
-            self.q1_line.set_data([], [])
-            self.q2_line.set_data([], [])
-            self.q3_line.set_data([], [])
-            self.ax_position.set_xlim(0, 1)
-            self.ax_position.set_ylim(-5, 165)
+            q_lines = [self.q1_line, self.q2_line, self.q3_line]
+            qd_lines = [self.qd1_line, self.qd2_line, self.qd3_line]
+            qdd_lines = [self.qdd1_line, self.qdd2_line, self.qdd3_line]
+            e_q_lines = [self.error_q1_line, self.error_q2_line, self.error_q3_line]
+            e_qd_lines = [self.error_qd1_line, self.error_qd2_line, self.error_qd3_line]
+            e_qdd_lines = [self.error_qdd1_line, self.error_qdd2_line, self.error_qdd3_line]
+            tau_lines = [self.forces_q1_line, self.forces_q2_line, self.forces_q3_line]
+            for i in range(3):
+                lines = [q_lines[i], qd_lines[i], qdd_lines[i], e_q_lines[i], e_qd_lines[i], e_qdd_lines[i], tau_lines[i]]
+                for line in lines:
+                    line.set_data([], [])
+
+            axes = [self.ax_position, self.ax_velocity, self.ax_acceleration, self.ax_error_q, self.ax_error_qd, self.ax_error_qdd, self.ax_forces]
+            for ax in axes:
+                ax.set_xlim(0,1)
+                ax.set_ylim(-1,1)
             
-            # self.canvas_positioning.draw()
+            # Redesenhar
             self.canvas_time_evolution.draw()
+            self.canvas_errors.draw()
+            self.canvas_forces.draw()
             
         except Exception as e:
             print(f"Erro ao resetar gráfico de posição: {e}")
@@ -607,36 +605,34 @@ class RobotPlot(QWidget):
     """--------------------------- Reset da Trajetória ---------------------------"""
     def reset_trajectory(self):
         """Limpar dados de trajetória de todos os gráficos"""
-        self.traj_line_q1.set_data([], [])
-        self.traj_line_q2.set_data([], [])
-        self.traj_line_q3.set_data([], [])
+        traj_line_q = [self.traj_line_q1, self.traj_line_q2, self.traj_line_q3]
+        traj_line_qd = [self.traj_line_qd1, self.traj_line_qd2, self.traj_line_qd3]
+        traj_line_qdd = [self.traj_line_qdd1, self.traj_line_qdd2, self.traj_line_qdd3]
+        for i in range(3):
+            traj_line_q[i].set_data([], [])
+            traj_line_qd[i].set_data([], [])
+            traj_line_qdd[i].set_data([], [])
+
+        lines = [self.traj_line_xy, self.traj_line_rz, self.robot_target_line_xy, self.robot_target_line_rz]
+        for line in lines:
+            line.set_data([], [])
+        
         self.traj_line_3d.set_data_3d([], [], [])
-        self.traj_line_xy.set_data([], [])
-        self.traj_line_rz.set_data([], [])
-        # self.target_3d.set_data_3d([], [], [])
-        # self.target_xy.set_data([], [])
-        # self.target_rz.set_data([], [])
         self.robot_target_line_3d.set_data_3d([], [], [])
-        self.robot_target_line_xy.set_data([], [])
-        self.robot_target_line_rz.set_data([], [])
 
         self.canvas_positioning.draw()
 
     """--------------------------- Reset das linhas de Posicionamento ---------------------------"""
     def reset_positioning_lines(self):
         """Limpar linhas de posicionamento de todos os gráficos"""
-        self.x_intial_line.set_data([], [])
-        self.y_intial_line.set_data([], [])
-        self.x_final_line.set_data([], [])
-        self.y_final_line.set_data([], [])
-        self.r_initial_line.set_data([], [])
-        self.r_final_line.set_data([], [])
+        lines = [self.x_intial_line, self.x_final_line, self.y_intial_line, self.y_final_line, self.r_initial_line, self.r_final_line]
+        for line in lines:
+            line.set_data([], [])
 
         try:
-            self.wedge_q1_initial.remove()
-            self.wedge_q2_initial.remove()
-            self.wedge_q1_final.remove()
-            self.wedge_q2_final.remove()
+            wedges = [self.wedge_q1_initial, self.wedge_q1_final, self.wedge_q2_initial, self.wedge_q2_final]
+            for wedge in wedges:
+                wedge.remove()
         except:
             pass
         self.d3_initial_line.set_data([], [])

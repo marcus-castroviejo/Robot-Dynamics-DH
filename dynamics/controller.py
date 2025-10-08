@@ -100,6 +100,7 @@ class CalculatedTorqueController:
         # Erros
         error = q_traj - q_real
         e_dot = qd_traj - qd_real
+        e_ddot = qdd_traj - qdd_real
         self.e_int += error * dt
 
         # Matriz de Inércia, Matriz de Coriolis e Vetor de Gravidade
@@ -134,7 +135,7 @@ class CalculatedTorqueController:
         # Atualiza o Counter
         self.counter += 1
 
-        return (error, q_real, qd_real, qdd_real, tau)
+        return (q_real, qd_real, qdd_real, error, e_dot, e_ddot, tau)
 
     """
     =================================================================================================================
