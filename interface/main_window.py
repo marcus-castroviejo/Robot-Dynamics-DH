@@ -52,6 +52,14 @@ class RobotControlInterface(QMainWindow):
         self.setWindowTitle("Controle CocoaBot")
         self.setup_responsive_window()
         
+        # Estilo para os botões
+        self.error_style = """
+        QLineEdit {
+            border: 2px solid #dc3545;
+            background-color: #fff5f5;
+        }"""
+        self.normal_style = ""
+
         # Inicializar componentes
         self.init_components()          # Cria os objetos das demais classes (CocoaBot, Trajectory, Simulation_Thread)
         self.init_ui()                  # Cria os painéis de Controle e Visualização
@@ -62,14 +70,6 @@ class RobotControlInterface(QMainWindow):
         self.default_q1 = np.deg2rad(0.0)
         self.default_q2 = np.deg2rad(80.0)
         self.default_d3 = 0.03
-
-        # Estilo para os botões
-        self.error_style = """
-        QLineEdit {
-            border: 2px solid #dc3545;
-            background-color: #fff5f5;
-        }"""
-        self.normal_style = ""
         
         # Coloar o robô na posição de início
         self.robot_plot.update_robot_position(self.default_q1, self.default_q2, self.default_d3)    # self.initial_t, 
@@ -162,6 +162,7 @@ class RobotControlInterface(QMainWindow):
         # Adicionando os Campos
         layout.addWidget(self.create_positions_group())     # (Linha 1): Campo de Posição
         layout.addWidget(self.create_trajectory_group())    # (Linha 2): Campo de trajetória
+        layout.addWidget(self.create_control_group())
         layout.addWidget(self.create_simulation_group())    # (Linha 3): Campo de Simulação
         layout.addWidget(self.create_status_group())        # (Linha 4): Campo de Status
         
@@ -221,22 +222,22 @@ class RobotControlInterface(QMainWindow):
         # Headers: 
         init_label = QLabel("Inicial")                      # (Linha 1): " " | "Inicial" | "Final"
         final_label = QLabel("Final")
-        layout.addWidget(init_label, 1, 1)
-        layout.addWidget(final_label, 1, 2)
+        layout.addWidget(init_label, 1, 1, Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(final_label, 1, 2, Qt.AlignmentFlag.AlignCenter)
         
         # Linhas das juntas: 
         self.q1_label = QLabel("q1 [deg]:")                 # (Linha 2): "q1 [deg]:" | [entrada: initial_q1] | [entrada: final_q1]
-        layout.addWidget(self.q1_label, 2, 0)
+        layout.addWidget(self.q1_label, 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self.initial_q1, 2, 1)
         layout.addWidget(self.final_q1, 2, 2)
 
         self.q2_label = QLabel("q2 [deg]:")                 # (Linha 3): "q2 [deg]:" | [entrada: initial_q2] | [entrada: final_q2]
-        layout.addWidget(self.q2_label, 3, 0)
+        layout.addWidget(self.q2_label, 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self.initial_q2, 3, 1)
         layout.addWidget(self.final_q2, 3, 2)
 
         self.d3_label = QLabel("d3 [cm]:")                  # (Linha 4): "d3 [cm]:" | [entrada: initial_q3] | [entrada: final_q3]
-        layout.addWidget(self.d3_label, 4, 0)
+        layout.addWidget(self.d3_label, 4, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self.initial_d3, 4, 1)
         layout.addWidget(self.final_d3, 4, 2)
         
@@ -266,15 +267,17 @@ class RobotControlInterface(QMainWindow):
         self.duration_field.setMaximumHeight(35)
         self.dt_field.setMaximumHeight(35)
                 
-        # Adicionar os Widgets
-        dur_label = QLabel("Duração [s]:")              # (Linha 0): "Duração [s] | [entrada: duration]"
-        layout.addWidget(dur_label, 0, 0)
-        layout.addWidget(self.duration_field, 0, 1)
+        # Adicionar os Headers
+        dur_label = QLabel("Duração [s]")               # (Linha 0): "Duração [s] | [entrada: duration]"
+        dt_label = QLabel("dt [ms]")                    # (Linha 1): "dt [ms] | [entrada: dt]"
+        layout.addWidget(dur_label, 0, 0, Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(dt_label, 0, 1, Qt.AlignmentFlag.AlignCenter)
 
-        dt_label = QLabel("dt [ms]:")                   # (Linha 1): "dt [ms] | [entrada: dt]"
-        layout.addWidget(dt_label, 1, 0)
+        # Adiciona os Campos
+        layout.addWidget(self.duration_field, 1, 0)
         layout.addWidget(self.dt_field, 1, 1)
 
+        # Adiciona os Botões
         button_style = """
             QPushButton {
                 padding: 4px 8px;
@@ -283,16 +286,67 @@ class RobotControlInterface(QMainWindow):
                 max-height: 25px;
             }
         """
+
+        # Botão: calcular trajetória
         self.btn_calc_trajectory = QPushButton("Calcular Trajetória")
         self.btn_calc_trajectory.setStyleSheet(button_style)
-        layout.addWidget(self.btn_calc_trajectory, 2, 1)
-
-        self.btn_send_to_robot = QPushButton("Enviar para o Robô")
-        self.btn_send_to_robot.setStyleSheet(button_style)
-        layout.addWidget(self.btn_send_to_robot, 3, 1)
+        layout.addWidget(self.btn_calc_trajectory, 2, 0, 1, 2)
+        
+        # Botão: Enviar para o robô
+        # self.btn_send_to_robot = QPushButton("Enviar para o Robô")
+        # self.btn_send_to_robot.setStyleSheet(button_style)
+        # layout.addWidget(self.btn_send_to_robot, 3, 0, 1, 2)
 
         return group
-    
+
+    """--------------------------- 1.2) Painel de Controle -> Campo de Trajetória ---------------------------"""
+    def create_control_group(self):
+        # Layout Geral
+        group = QGroupBox("Controle")
+        layout = QGridLayout(group)
+        layout.setSpacing(4)
+        
+        # Checkbox Controlador                                  # (Linha 0): [checkbox] | "Usar controlador Torque Calculado"
+        self.use_controller = QCheckBox("Usar controlador Torque Calculado")
+        layout.addWidget(self.use_controller, 0, 0, 1, 3)
+        self.use_controller.setChecked(True)
+
+        # Validador
+        double_validator = QDoubleValidator()
+        double_validator.setDecimals(5)
+        double_validator.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
+
+        # Headers: ganhos Kp, Kd, Ki
+        self.Kp_label = QLabel("Kp")                          # (Linha 1): " " | "Inicial" | "Final"
+        self.Kd_label = QLabel("Kd")
+        self.Ki_label = QLabel("Ki")
+        layout.addWidget(self.Kp_label, 1, 0, Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.Kd_label, 1, 1, Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.Ki_label, 1, 2, Qt.AlignmentFlag.AlignCenter)
+
+        # Campos para os ganhos
+        self.Kp_field = QLineEdit("0.050")
+        self.Kd_field = QLineEdit("0.150")
+        self.Ki_field = QLineEdit("0.001")
+
+        # Adiciona validador
+        self.Kp_field.setValidator(double_validator)
+        self.Kd_field.setValidator(double_validator)
+        self.Ki_field.setValidator(double_validator)
+
+        # Altura (Height)
+        self.Kp_field.setMaximumHeight(35)
+        self.Kd_field.setMaximumHeight(35)
+        self.Ki_field.setMaximumHeight(35)
+
+        # Adicionar os layout
+        layout.addWidget(self.Kp_field, 2, 0)
+        layout.addWidget(self.Kd_field, 2, 1)
+        layout.addWidget(self.Ki_field, 2, 2)
+        
+        self.update_controller(True)
+        return group
+
     """--------------------------- 1.3) Painel de Controle -> Campo de Simulação ---------------------------"""
     def create_simulation_group(self):
         """Controles de simulação"""
@@ -300,12 +354,6 @@ class RobotControlInterface(QMainWindow):
         group = QGroupBox("Simulação")
         layout = QVBoxLayout(group)
         layout.setSpacing(4)
-        
-        # Checkbox Controlador                                  # (Linha 0): [checkbox] | "Usar controlador Torque Calculado"
-        self.use_controller = QCheckBox("Usar controlador Torque Calculado")
-        layout.addWidget(self.use_controller)
-        self.use_controller.setChecked(True)
-        self.update_controller(True)
         
         # Velocidade                                            # (Linha 1): "Velocidade:" | [slider] | "0.6x"
         speed_layout = QHBoxLayout()
@@ -329,7 +377,6 @@ class RobotControlInterface(QMainWindow):
         layout.addWidget(self.progress_bar)
         
         # Botões                                                # (Linhas 3-6): Botões ("trajetória", "simular", "parar", "robô")
-        # self.btn_calc_trajectory = QPushButton("Calcular Trajetória")
         self.btn_simulate = QPushButton("Simular")
         self.btn_stop = QPushButton("Pausar")
         # Adotar o estilo do botão
@@ -341,14 +388,12 @@ class RobotControlInterface(QMainWindow):
                 max-height: 25px;
             }
         """
-        # self.btn_calc_trajectory.setStyleSheet(button_style)
         self.btn_simulate.setStyleSheet(button_style)
         self.btn_stop.setStyleSheet(button_style)
         # Alguns botões são desabilitados inicialmente
         self.btn_stop.setEnabled(False)
         self.btn_simulate.setEnabled(False)
         # Adiciona os Widgets
-        # layout.addWidget(self.btn_calc_trajectory)
         layout.addWidget(self.btn_simulate)
         layout.addWidget(self.btn_stop)
         
@@ -418,7 +463,7 @@ class RobotControlInterface(QMainWindow):
             self.speed_slider.valueChanged.connect(self.update_speed)
             self.use_controller.clicked.connect(self.update_controller)
             self.radio_joint.toggled.connect(self.update_position_labels)
-            self.btn_send_to_robot.clicked.connect(self.send_to_robot)
+            # self.btn_send_to_robot.clicked.connect(self.send_to_robot)
 
             # Entradas dados: Atualização dos dados (tempo real): textChanged
             self.initial_q1.textChanged.connect(self.update_coordenate_system)
@@ -429,6 +474,9 @@ class RobotControlInterface(QMainWindow):
             self.final_d3.textChanged.connect(self.update_coordenate_system)
             self.duration_field.textChanged.connect(self.update_trajectory_params)
             self.dt_field.textChanged.connect(self.update_trajectory_params)
+            self.Kp_field.textChanged.connect(self.update_gains)
+            self.Kd_field.textChanged.connect(self.update_gains)
+            self.Ki_field.textChanged.connect(self.update_gains)
             
             # Conecta com a Thread de simulation_thread.py
             # Quando os sinais chegam, as funções de update são acionadas
@@ -485,7 +533,8 @@ class RobotControlInterface(QMainWindow):
         fields = [
             (self.initial_q1, "q1 inicial"), (self.initial_q2, "q2 inicial"), (self.initial_d3, "d3 inicial"),
             (self.final_q1, "q1 final"), (self.final_q2, "q2 final"), (self.final_d3, "d3 final"),
-            (self.duration_field, "duração"), (self.dt_field, "dt")
+            (self.duration_field, "duração"), (self.dt_field, "dt"), 
+            (self.Kp_field, "Kp"), (self.Kd_field, "Kd"), (self.Ki_field, "Ki")
         ]
         
         for field, name in fields:
@@ -768,6 +817,10 @@ class RobotControlInterface(QMainWindow):
             self.enable_position_buttons(not enable)
             self.duration_field.setEnabled(not enable)
             self.dt_field.setEnabled(not enable)
+            self.use_controller.setEnabled(not enable)
+            self.Kp_field.setEnabled(not enable)
+            self.Kd_field.setEnabled(not enable)
+            self.Ki_field.setEnabled(not enable)
 
     """--------------------------- (Des)Habilita Botões de Posição ---------------------------"""
     def enable_position_buttons(self, enable):
@@ -827,6 +880,9 @@ class RobotControlInterface(QMainWindow):
     """--------------------------- 1.2) Funções de Controle -> Começar/Cancelar Simulação ---------------------------"""
     def start_stop_simulation(self):
         if self.btn_simulate.text() == "Simular":
+            if not hasattr(self, 'trajectory') or not self.trajectory:
+                QMessageBox.warning(self, "Aviso", "Calcule trajetória primeiro!")
+                return
             self.start_simulation()
             self.btn_simulate.setText("Cancelar")
         elif self.btn_simulate.text() == "Cancelar":
@@ -837,11 +893,7 @@ class RobotControlInterface(QMainWindow):
     """--------------------------- 1.3) Funções de Controle -> Começar Simulação ---------------------------"""
     def start_simulation(self):
         """Iniciar simulação"""
-        try:
-            if not hasattr(self, 'trajectory') or not self.trajectory:
-                QMessageBox.warning(self, "Aviso", "Calcule trajetória primeiro!")
-                return
-            
+        try:        
             if not self.validate_inputs(block=True):
                 return
 
@@ -919,10 +971,21 @@ class RobotControlInterface(QMainWindow):
         try:
             if checked:
                 self.controller = CalculatedTorqueController(self.robot)
+                self.update_gains()
             else:
                 if hasattr(self, 'controller'):
                     self.controller = None
+
             self.simulation_thread.set_controller(self.controller)
+            
+            # Alterar a visibilidade dos Campos
+            self.Kp_label.setVisible(checked)
+            self.Kd_label.setVisible(checked)
+            self.Ki_label.setVisible(checked)
+            self.Kp_field.setVisible(checked)
+            self.Kd_field.setVisible(checked)
+            self.Ki_field.setVisible(checked)
+        
         except Exception as e:
             print(f"Erro ao atualizar controlador: {e}")
     
@@ -1069,6 +1132,24 @@ class RobotControlInterface(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro na transformação do sistema de coordenada: {str(e)}")
     
+    """--------------------------- 2.8) Funções de Update -> Ganhos do Controlador ---------------------------"""
+    def update_gains(self):
+        try:
+            if not self.initial_validation(block=False):
+                return
+            
+            if not hasattr(self, "controller") or self.controller:
+                return
+            
+            Kp_scaling_factor = float(self.Kp_field.text())
+            Kd_scaling_factor = float(self.Kd_field.text())
+            Ki_scaling_factor = float(self.Ki_field.text())
+
+            self.controller.set_gain_factors(Kp_scaling_factor, Kd_scaling_factor, Ki_scaling_factor)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro ao atualizar os ganhos: {str(e)}")
+
     """
     =================================================================================================================
                                                 Fechar a Aplicação

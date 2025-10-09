@@ -28,7 +28,7 @@ class CalculatedTorqueController:
         # Robô
         self.robot = robot
         self.setup_controller()
-        self.calculate_gains()
+        self.set_gain_factors()
     
     """
     =================================================================================================================
@@ -46,15 +46,9 @@ class CalculatedTorqueController:
         self.wn = 3/(self.zeta*self.ts)
         self.p = 5*self.zeta*self.wn
 
-    """--------------------------- Cálculo dos ganhos ---------------------------"""
-    def calculate_gains(self):
-        """Ganhos Kp, Kd e Ki"""
-        self.Kp = 0.05 * np.diag(3*[self.wn**2 + 2*self.zeta*self.wn*self.p])   # scaling_factor: 0.050 (!!)
-        self.Kd = 0.15 * np.diag(3*[2*self.zeta*self.wn + self.p])              # scaling_factor: 0.150 (!!)
-        self.Ki = 0.001 * np.diag(3*[self.wn**2*self.p])                        # scaling_factor: 0.001 (!!)
-    
     """--------------------------- Trajetória desejada ---------------------------"""
     def set_trajectory(self, trajectory):
+        """Definindo a trajetória"""
         # Trajetória
         self.t = [point[0] for point in trajectory]
         self.dt = list(np.diff([self.t[0]] + self.t))
@@ -74,6 +68,21 @@ class CalculatedTorqueController:
 
         # Counter
         self.counter = 0
+    
+    """--------------------------- Escalando os ganhos ---------------------------"""
+    def set_gain_factors(self, Kp_scaling_factor=0.050, Kd_scaling_factor=0.150, Ki_scaling_factor=0.001):
+        """Definindo os fatores de escala para os ganhos"""
+        self.Kp_scaling_factor = Kp_scaling_factor
+        self.Kd_scaling_factor = Kd_scaling_factor
+        self.Ki_scaling_factor = Ki_scaling_factor
+        self.calculate_gains()
+    
+    """--------------------------- Cálculo dos ganhos ---------------------------"""
+    def calculate_gains(self):
+        """Ganhos Kp, Kd e Ki"""
+        self.Kp = self.Kp_scaling_factor * np.diag(3*[self.wn**2 + 2*self.zeta*self.wn*self.p])     # scaling_factor: 0.050 (!!)
+        self.Kd = self.Kd_scaling_factor * np.diag(3*[2*self.zeta*self.wn + self.p])                # scaling_factor: 0.150 (!!)
+        self.Ki = self.Ki_scaling_factor * np.diag(3*[self.wn**2*self.p])                           # scaling_factor: 0.001 (!!)
     
     """
     =================================================================================================================

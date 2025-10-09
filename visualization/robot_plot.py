@@ -100,16 +100,16 @@ class RobotPlot(QWidget):
         
         # Plot 3D
         self.ax_3d = self.fig_positioning.add_subplot(gs[:,1], projection='3d')
-        self.ax_3d.set(xlim=(-1, 1), ylim=(-1, 1), zlim=(0, 1.5), xlabel='X (m)', ylabel='Y (m)', zlabel='Z (m)', title='Vista 3D')
+        self.ax_3d.set(xlim=(-1, 1), ylim=(-1, 1), zlim=(0, 1.5), xlabel='X [m]', ylabel='Y [m]', zlabel='Z [m]', title='Vista 3D')
         
         # Plot XY (vista superior)
         self.ax_xy = self.fig_positioning.add_subplot(gs[0,0])
-        self.ax_xy.set(xlim=(-1, 1), ylim=(-1, 1), xlabel='X (m)', ylabel='Y (m)', title='Vista Superior (XY)', aspect=True)
+        self.ax_xy.set(xlim=(-1, 1), ylim=(-1, 1), xlabel='X [m]', ylabel='Y [m]', title='Vista Superior (XY)', aspect=True)
         self.ax_xy.grid(True, alpha=.3)
 
         # Plot RZ (Vista Lateral)
         self.ax_rz = self.fig_positioning.add_subplot(gs[1,0])
-        self.ax_rz.set(xlim=(-0.6, 0.8), ylim=(-0.2, 1.2), xlabel='Distância do centro R (m)', ylabel='Z (m)', title='Vista Lateral (RZ)', aspect=True)
+        self.ax_rz.set(xlim=(-0.6, 0.8), ylim=(-0.2, 1.2), xlabel='Distância do centro: R [m]', ylabel='Z [m]', title='Vista Lateral (RZ)', aspect=True)
         self.ax_rz.grid(True, alpha=.3)
 
     """--------------------------- Configuração dos Plots: Time Evolution Plots ---------------------------"""
