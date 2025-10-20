@@ -6,6 +6,7 @@
 import sys
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from interface import RobotControlInterface
+from PyQt6.QtCore import QTimer
 
 
 def main():
@@ -61,6 +62,19 @@ def main():
         # Criar e mostrar janela principal
         window = RobotControlInterface()
         window.show()
+
+        # --- Teste simples da comunicação ESP32 ---
+
+        ESP32_IP = "192.168.4.1"   # <-- Troque pelo IP real da sua ESP32
+        ESP32_PORT = 3333          # <-- E pela porta usada no servidor da ESP32
+
+        # tenta conectar quando a GUI já carregou
+        QTimer.singleShot(300, lambda: window.connect_esp32(ESP32_IP, ESP32_PORT))
+
+        # (opcional) manda um PING 1s depois pra ver ida/volta
+        QTimer.singleShot(1300, lambda: window.send_esp32_text("PING"))
+        # ou JSON:
+        # QTimer.singleShot(1500, lambda: window.send_esp32_json({"cmd": "ping"}))
         
         # Mensagem de inicialização
         window.update_status("Interface iniciada com sucesso")

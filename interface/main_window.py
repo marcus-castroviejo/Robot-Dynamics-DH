@@ -35,6 +35,8 @@ from dynamics import CocoaBot, CalculatedTorqueController
 from trajectory import TrajectoryGenerator
 from visualization import RobotPlot
 from .simulation_thread import SimulationThread
+from esp32_comm import ESP32Connection
+
 
 
 class RobotControlInterface(QMainWindow):
@@ -81,6 +83,19 @@ class RobotControlInterface(QMainWindow):
         # print("qf:\t", np.round([np.rad2deg(self.qf[0]), np.rad2deg(self.qf[1]), 100*self.qf[2]], 2))
         # print("pos0:\t", np.round(self.pos0, 2))
         # print("posf:\t", np.round(self.pos0, 2))
+
+        # --- Comunicação com ESP32 ---
+        # cria a camada de comunicação
+        self.conn = ESP32Connection(self)
+
+        # liga sinais à UI
+        self.conn.status.connect(self.update_status)
+        self.conn.error_occurred.connect(self._on_comm_error)
+        self.conn.text_received.connect(self._on_text_line)
+        self.conn.json_received.connect(self._on_json_obj)
+        self.conn.connected.connect(lambda: self.update_status("Conectado à ESP32"))
+        self.conn.disconnected.connect(lambda: self.update_status("Desconectado da ESP32"))
+
 
     """--------------------------- Inicialização das outras Classes ---------------------------"""
     def init_components(self):
@@ -1149,6 +1164,38 @@ class RobotControlInterface(QMainWindow):
             
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao atualizar os ganhos: {str(e)}")
+
+    """"-------------------- Comunicação ---------------"""
+
+    # --- Métodos fininhos para a GUI chamar ---
+    def connect_esp32(self, host: str, port: int):
+        self.conn.connect_to(host, port)
+
+    def disconnect_esp32(self):
+        self.conn.disconnect()
+
+    def send_esp32_text(self, text: str):
+        self.conn.send_text(text)
+
+    def send_esp32_json(self, payload: dict):
+        self.conn.send_json(payload)
+
+    # ===== Handlers dos sinais da comunicação =====
+    def _on_comm_error(self, msg: str):
+        self.update_status(f"Erro ESP32: {msg}")
+
+    def _on_text_line(self, line: str):
+        self.update_status(f"RX texto: {line}")
+
+    def _on_json_obj(self, obj: dict):
+        try:
+            self.update_status(f"RX json: {', '.join(obj.keys())}")
+        except Exception:
+            self.update_status(f"RX json: {obj}")
+
+
+
+
 
     """
     =================================================================================================================
