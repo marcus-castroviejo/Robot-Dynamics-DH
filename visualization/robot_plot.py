@@ -556,7 +556,7 @@ class RobotPlot(QWidget):
             
             # Atualiza os limites do plot
             if self.time_data:
-                margins = 3*[.5] + [0.0002, 0.001, 0.02] + [0.05]
+                margins = 3*[.5] + [0.0002, 0.001, 0.001] + [0.05]
                 for ax, data, margin in zip(axes+e_axes+tau_axes, datas+e_datas+tau_datas, margins):
                     ax.set_xlim(0, max(self.time_data) + 0.5)
                     ax.set_ylim(*get_yrange(*data, margin=margin))

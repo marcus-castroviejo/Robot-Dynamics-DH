@@ -35,7 +35,7 @@ from dynamics import CocoaBot, CalculatedTorqueController
 from trajectory import TrajectoryGenerator
 from visualization import RobotPlot
 from .simulation_thread import SimulationThread
-from esp32_comm import ESP32Connection
+from esp32_comm import ESP32Server
 
 
 
@@ -84,17 +84,28 @@ class RobotControlInterface(QMainWindow):
         # print("pos0:\t", np.round(self.pos0, 2))
         # print("posf:\t", np.round(self.pos0, 2))
 
-        # --- Comunicação com ESP32 ---
-        # cria a camada de comunicação
-        self.conn = ESP32Connection(self)
+        # --- Servidor TCP (PC) <-> ESP32 ---
+        self.srv = ESP32Server(self)
 
-        # liga sinais à UI
-        self.conn.status.connect(self.update_status)
-        self.conn.error_occurred.connect(self._on_comm_error)
-        self.conn.text_received.connect(self._on_text_line)
-        self.conn.json_received.connect(self._on_json_obj)
-        self.conn.connected.connect(lambda: self.update_status("Conectado à ESP32"))
-        self.conn.disconnected.connect(lambda: self.update_status("Desconectado da ESP32"))
+        self.srv.status.connect(self.update_status)
+        self.srv.error_occurred.connect(self._on_comm_error)
+        self.srv.text_received.connect(self._on_text_line)
+        self.srv.json_received.connect(self._on_json_obj)
+
+        self.srv.client_connected.connect(lambda ip, port: self.update_status(f"ESP32 conectada: {ip}:{port}"))
+        self.srv.client_disconnected.connect(lambda: self.update_status("ESP32 desconectada"))
+        self.srv.server_started.connect(lambda p: self.update_status(f"Servidor iniciado na porta {p}"))
+        self.srv.server_stopped.connect(lambda: self.update_status("Servidor parado"))
+
+        # (opcional) estado para guardar último ref/meas
+        self.last_ref = None
+        self.last_meas = None
+        self.last_meas_t = None
+
+        # <<< MODIFICADO: Adiciona armazenamento para qd e qdd
+        self.last_meas_qdd = None
+        self.last_meas_qdd2 = None
+        self.last_meas_i = None
 
 
     """--------------------------- Inicialização das outras Classes ---------------------------"""
@@ -105,6 +116,8 @@ class RobotControlInterface(QMainWindow):
             self.trajectory_gen = TrajectoryGenerator()
             self.simulation_thread = SimulationThread()
             self.trajectory = []
+            self.simulation_thread.tx_json.connect(self.send_esp32_json)
+
             
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao inicializar componentes: {str(e)}")
@@ -1167,18 +1180,26 @@ class RobotControlInterface(QMainWindow):
 
     """"-------------------- Comunicação ---------------"""
 
-    # --- Métodos fininhos para a GUI chamar ---
-    def connect_esp32(self, host: str, port: int):
-        self.conn.connect_to(host, port)
+   # ===== Servidor no PC =====
+    def start_esp32_server(self, port: int = 9000):
+        self.srv.start(port)
 
-    def disconnect_esp32(self):
-        self.conn.disconnect()
+    def stop_esp32_server(self):
+        self.srv.stop()
 
     def send_esp32_text(self, text: str):
-        self.conn.send_text(text)
+        self.srv.send_text(text)
 
     def send_esp32_json(self, payload: dict):
-        self.conn.send_json(payload)
+        self.srv.send_json(payload)
+
+   
+    def connect_esp32(self, host: str, port: int):
+        # host é ignorado: o servidor escuta em 0.0.0.0:port
+        self.start_esp32_server(port)
+
+    def disconnect_esp32(self):
+        self.stop_esp32_server()
 
     # ===== Handlers dos sinais da comunicação =====
     def _on_comm_error(self, msg: str):
@@ -1188,12 +1209,63 @@ class RobotControlInterface(QMainWindow):
         self.update_status(f"RX texto: {line}")
 
     def _on_json_obj(self, obj: dict):
-        try:
-            self.update_status(f"RX json: {', '.join(obj.keys())}")
-        except Exception:
-            self.update_status(f"RX json: {obj}")
+        if "pong" in obj:
+            self.update_status("RX json: pong")
+            return
 
+        if "ref" in obj:
+            self.last_ref = obj.get("ref")
+            self.update_status(f"RX json (ref): {self.last_ref}")
+            return
 
+        if "meas_q" in obj:
+            meas_q = obj.get("meas_q")
+            meas_qdd = obj.get("meas_qdd")   # Espera-se que a ESP envie isso
+            meas_qdd2 = obj.get("meas_qdd2")
+            meas_i = obj.get("meas_i")
+            tval = obj.get("t")
+
+            # --- Validação Mínima ---
+            if meas_qdd is None or meas_qdd2 is None or meas_i is None:
+                self.update_status(f"Erro RX: Pacote 'meas_q' recebido, mas 'meas_qdd', 'meas_qdd2' ou meas_i ausentes.")
+                return
+
+            # --- filtro: ignore pacote q = [0,0,0] ---
+            try:
+                if isinstance(meas_q, list) and len(meas_q) >= 3:
+                    all_zero = (float(meas_q[0]) == 0.0 and float(meas_q[1]) == 0.0 and float(meas_q[2]) == 0.0)
+                    if all_zero:
+                        self.update_status("RX meas: Pacote [0,0,0] ignorado")
+                        return
+            except Exception:
+                pass
+
+            self.last_meas = meas_q
+            self.last_meas_qdd = meas_qdd
+            self.last_meas_qdd2 = meas_qdd2
+            self.last_meas_i = meas_i
+            self.last_meas_t = tval
+
+            # entrega para a thread de simulação (slot thread-safe)
+            if hasattr(self, "simulation_thread") and self.simulation_thread is not None:
+                try:
+                    t_num = float(tval) if tval is not None else 0.0
+                except Exception:
+                    t_num = 0.0
+                
+                self.simulation_thread.ingest_meas_sig.emit(
+                    self.last_meas,       # q
+                    self.last_meas_qdd,    # qdd
+                    self.last_meas_qdd2,   # qdd2
+                    self.last_meas_i,     # i
+                    t_num                 # t
+                )
+
+            self.update_status(f"RX meas (q): {self.last_meas}")
+            return
+
+        # fallback
+        self.update_status(f"RX json: {obj}")
 
 
 

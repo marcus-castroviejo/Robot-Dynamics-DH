@@ -63,18 +63,20 @@ def main():
         window = RobotControlInterface()
         window.show()
 
-        # --- Teste simples da comunicação ESP32 ---
+        # --- Servidor TCP no PC para a ESP32 se conectar ---
 
-        ESP32_IP = "192.168.4.1"   # <-- Troque pelo IP real da sua ESP32
-        ESP32_PORT = 3333          # <-- E pela porta usada no servidor da ESP32
+        SERVER_PORT = 9000  # escolha a porta (ex.: 9000)
 
-        # tenta conectar quando a GUI já carregou
-        QTimer.singleShot(300, lambda: window.connect_esp32(ESP32_IP, ESP32_PORT))
+        def after_client_connected():
+            window.update_status("ESP32 conectada; iniciando testes…")
+            # 1) ping -> espera {"pong":true}
+            window.send_esp32_json({"cmd": "ping"})
 
-        # (opcional) manda um PING 1s depois pra ver ida/volta
-        QTimer.singleShot(1300, lambda: window.send_esp32_text("PING"))
-        # ou JSON:
-        # QTimer.singleShot(1500, lambda: window.send_esp32_json({"cmd": "ping"}))
+        # quando a ESP32 conectar, disparamos os testes
+        window.srv.client_connected.connect(lambda ip, port: after_client_connected())
+
+        # inicia o servidor depois que a UI carrega
+        QTimer.singleShot(300, lambda: window.start_esp32_server(SERVER_PORT))
         
         # Mensagem de inicialização
         window.update_status("Interface iniciada com sucesso")
