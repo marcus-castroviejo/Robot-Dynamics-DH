@@ -33,16 +33,37 @@ class RobotPlot(QWidget):
     def __init__(self, robot, parent=None):
         super().__init__()
         self.robot = robot
-        self.initialize_data()              # Salvar dados temporais
+
+        # Flag para controlar qual aba está ativa
+        self.active_tab = 0  # 0=Positioning, 1=Time, 2=Errors, 3=Forces
+
+        self.initialize_data()
+        
+        # ========== PARÂMETROS DA GARRA (baseado no código fornecido) ==========
+        self.gripper_params = {
+            'A': np.array([12.5, 0.0]),     # Centro engrenagem esquerda
+            'B': np.array([7.32, 19.32]),   # Pivô fixo esquerdo
+            'r0': 30.0,                     # Raio do círculo da engrenagem
+            'r1': 30.0,                     # Raio do círculo do pivô
+            'd': 20.0,                      # Distância fixa P0-P1
+            'h': 40.0,                      # Altura do dedo (P1→P2)
+            'x': 8.0,                       # Comprimento horizontal do dedo (P2→P3)
+            'theta1_ref': np.deg2rad(60),   # Ângulo de referência para escolher solução
+        }
         
         try:
-            self.create_figures()           # Cria uma figura para cada Aba
-            self.setup_plots()              # Configura: posição, title, labels, limits, grid, ...
-            self.init_plot_lines()          # Inicializa as linhas dos plots
-            self.plot_workspace_views()     # Desenha o Workspace            
+            self.create_figures()
+            self.setup_plots()
+            self.init_plot_lines()
+            self.plot_workspace_views()
         except Exception as e:
             print(f"Erro ao inicializar plot: {e}")
     
+    """--------------------------- Aba ativa---------------------------"""
+    def set_active_tab(self, tab_index):
+        """Define qual aba está ativa (chamado externamente)"""
+        self.active_tab = tab_index
+
     """
     =================================================================================================================
                                                 Criação dos Plots
@@ -99,8 +120,13 @@ class RobotPlot(QWidget):
         gs = GridSpec(nrows=2, ncols=2, left=0.10, right=0.9, top=0.90, bottom=0.08, hspace=0.3, wspace=0.2, width_ratios=[2, 3])
         
         # Plot 3D
-        self.ax_3d = self.fig_positioning.add_subplot(gs[:,1], projection='3d')
+        self.ax_3d = self.fig_positioning.add_subplot(gs[0,1], projection='3d')
         self.ax_3d.set(xlim=(-1, 1), ylim=(-1, 1), zlim=(0, 1.5), xlabel='X [m]', ylabel='Y [m]', zlabel='Z [m]', title='Vista 3D')
+
+        # Plot Gripper
+        self.ax_gripper = self.fig_positioning.add_subplot(gs[1,1])
+        self.ax_gripper.set(xlim=(-60, 60), ylim=(-10, 100), xlabel='X [mm]', ylabel='Y [mm]', title='Abertura Garra', aspect=True)
+        self.ax_gripper.grid(True, alpha=.3)
         
         # Plot XY (vista superior)
         self.ax_xy = self.fig_positioning.add_subplot(gs[0,0])
@@ -211,8 +237,41 @@ class RobotPlot(QWidget):
         self.d3_initial_line, = self.ax_rz.plot([], [], 'b-', alpha=0.5, linewidth=1)
         self.d3_final_line, = self.ax_rz.plot([], [], 'g-', alpha=0.5, linewidth=1)
         
+        # ========== GARRA (adicionar no final de init_positioning_lines) ==========
+    
+        # Lado esquerdo
+        self.gripper_left_crank, = self.ax_gripper.plot([], [], 'o-', color='black', linewidth=3, markersize=6)
+        self.gripper_left_link, = self.ax_gripper.plot([], [], 'o-', color='blue', linewidth=5, markersize=6) # , label='Linkages'
+        self.gripper_left_rod, = self.ax_gripper.plot([], [], 'o-', color='black', linewidth=3, markersize=6)
+        self.gripper_left_finger, = self.ax_gripper.plot([], [], 'o-', color='blue', linewidth=5, markersize=7) # , label='Dedos'
+        
+        # Lado direito
+        self.gripper_right_crank, = self.ax_gripper.plot([], [], 'o-', color='black', linewidth=3, markersize=5)
+        self.gripper_right_link, = self.ax_gripper.plot([], [], 'o-', color='blue', linewidth=5, markersize=6)
+        self.gripper_right_rod, = self.ax_gripper.plot([], [], 'o-', color='black', linewidth=3, markersize=6)
+        self.gripper_right_finger, = self.ax_gripper.plot([], [], 'o-', color='blue', linewidth=5, markersize=7)
+        
+        # Barras centrais
+        self.gripper_chassis_AB, = self.ax_gripper.plot([], [], 'k-', linewidth=4)        # A ↔ B.    # , label='Chassis'
+        self.gripper_chassis_A_mirror, = self.ax_gripper.plot([], [], 'k-', linewidth=4)  # A ↔ -A
+        self.gripper_chassis_B_mirror, = self.ax_gripper.plot([], [], 'k-', linewidth=4)  # B ↔ -B
+        self.gripper_chassis_mirror, = self.ax_gripper.plot([], [], 'k-', linewidth=4)    # -A ↔ -B
+        
+        # Pivôs
+        self.gripper_pivots_A, = self.ax_gripper.plot([], [], 'ko', markersize=4) # , label='Engrenagens'
+        self.gripper_pivots_B, = self.ax_gripper.plot([], [], 'ko', markersize=4) # , label='Pivôs fixos'
+        
+        # Abertura
+        self.gripper_opening_line, = self.ax_gripper.plot([], [], 'g--', linewidth=2, alpha=0.7, label='Abertura')
+        
+        # Texto
+        self.gripper_text = self.ax_gripper.text(0, -8, '', ha='center', fontsize=10, 
+                                                color='green', fontweight='bold')
+        
+        self.ax_gripper.legend(loc='upper right', fontsize=8)
+        
         # Adicionar legendas
-        # self.ax_xy.legend()
+        self.ax_gripper.legend(loc='upper right', fontsize=8)
         self.ax_rz.legend()
     
     """--------------------------- Configuração das Linhas: Time Evolution Plots ---------------------------"""
@@ -475,6 +534,99 @@ class RobotPlot(QWidget):
         
         self.canvas_positioning.draw()
 
+    """--------------------------- Geometria da Garra ---------------------------"""
+    def calculate_gripper_geometry(self, servo_angle_deg):
+        """
+        Calcula geometria da garra usando o modelo cinemático correto
+        servo_angle_deg: ângulo do servo (0-180°)
+        """
+        import numpy as np
+        
+        # Funções auxiliares do código fornecido
+        def angdiff(u, v):
+            return abs((u - v + np.pi) % (2*np.pi) - np.pi)
+        
+        def theta1_candidates_one(A, B, r0, r1, d, theta0):
+            A = np.asarray(A, dtype=float)
+            B = np.asarray(B, dtype=float)
+            c = A - B + r0 * np.array([np.cos(theta0), np.sin(theta0)])
+            m = np.linalg.norm(c)
+            if m == 0:
+                return []
+            if not (abs(m - r1) <= d <= m + r1):
+                return []
+            alpha = np.arctan2(c[1], c[0])
+            x = (m*m + r1*r1 - d*d) / (2.0 * r1 * m)
+            x = np.clip(x, -1.0, 1.0)
+            beta = np.arccos(x)
+            t1a = (alpha + beta) % (2*np.pi)
+            t1b = (alpha - beta) % (2*np.pi)
+            if np.isclose(beta, 0.0):
+                return [t1a]
+            else:
+                return [t1a, t1b]
+        
+        def choose_theta1(theta1_list, theta1_ref=None):
+            if not theta1_list:
+                return None
+            if theta1_ref is None:
+                return theta1_list[0]
+            return min(theta1_list, key=lambda t: angdiff(t, theta1_ref))
+        
+        # Parâmetros
+        p = self.gripper_params
+        A, B = p['A'], p['B']
+        r0, r1, d = p['r0'], p['r1'], p['d']
+        h, x = p['h'], p['x']
+        
+        # Mapear servo (0-180°) para theta0
+        theta0 = np.deg2rad(servo_angle_deg)  # Você pode ajustar o mapeamento
+        
+        # Calcular P0
+        P0 = A + r0 * np.array([np.cos(theta0), np.sin(theta0)])
+        
+        # Calcular candidatos para theta1
+        t1_list = theta1_candidates_one(A, B, r0, r1, d, theta0)
+        if not t1_list:
+            return None
+        
+        # Escolher theta1
+        t1_chosen = choose_theta1(t1_list, theta1_ref=p['theta1_ref'])
+        if t1_chosen is None:
+            return None
+        
+        # Calcular P1
+        P1 = B + r1 * np.array([np.cos(t1_chosen), np.sin(t1_chosen)])
+        
+        # Calcular P2 e P3 (dedo esquerdo)
+        P2 = np.array([P1[0], P1[1] + h])
+        P3 = np.array([P2[0] - x, P2[1]])
+        
+        # Espelhar para lado direito
+        P0_R = np.array([-P0[0], P0[1]])
+        P1_R = np.array([-P1[0], P1[1]])
+        P2_R = np.array([-P2[0], P2[1]])
+        P3_R = np.array([-P3[0], P3[1]])
+        
+        A_R = np.array([-A[0], A[1]])
+        B_R = np.array([-B[0], B[1]])
+        
+        # Abertura (distância entre pontas)
+        opening = abs(P3[0] - P3_R[0])
+        
+        return {
+            # Esquerda
+            'A': A, 'B': B,
+            'P0': P0, 'P1': P1, 'P2': P2, 'P3': P3,
+            # Direita
+            'A_R': A_R, 'B_R': B_R,
+            'P0_R': P0_R, 'P1_R': P1_R, 'P2_R': P2_R, 'P3_R': P3_R,
+            # Info
+            'opening': opening,
+            'theta0': theta0,
+            'theta1': t1_chosen,
+        }
+
     """
     =================================================================================================================
                                                 Funções de Update
@@ -484,6 +636,8 @@ class RobotPlot(QWidget):
     """--------------------------- Update da Posição ---------------------------"""
     def update_robot_position(self, q1, q2, d3):
         """Atualizar posição do robô"""
+        if self.active_tab != 0:
+            return
         try:
             # Pega a posição de cada junta, dado (q1, q2, q3)  
             positions = self.robot.get_joint_positions(q1, q2, d3)          
@@ -506,6 +660,8 @@ class RobotPlot(QWidget):
     """--------------------------- Update da Posição Temporal ---------------------------"""
     def update_time_evolution(self, t, q, qd, qdd, e, ed, edd, tau):
         """Atualizar gráfico de posição com novos dados"""
+        if self.active_tab != 0:
+            return
         try:
             # Adicionar novos pontos
             self.time_data.append(t)
@@ -572,6 +728,8 @@ class RobotPlot(QWidget):
     """--------------------------- Reset da Posição Temporal ---------------------------"""
     def reset_position_graph(self):
         """Limpar dados do gráfico de Posição X Tempo"""
+        if self.active_tab != 0:
+            return
         try:
             # Limpar dados temporais
             self.initialize_data()
@@ -639,3 +797,88 @@ class RobotPlot(QWidget):
         self.d3_final_line.set_data([], [])
 
         self.canvas_positioning.draw()
+
+    """--------------------------- Update da Visualização da Garra ---------------------------"""
+    def update_gripper_plot(self, servo_angle_deg):
+        """
+        Atualiza a visualização da garra
+        servo_angle_deg: ângulo do servo em graus (0-180)
+        """
+        if self.active_tab != 0:
+            return
+        try:
+            # Calcular geometria
+            geom = self.calculate_gripper_geometry(servo_angle_deg)
+            if geom is None:
+                return
+            
+            # ===== LADO ESQUERDO =====
+            # Manivela A→P0
+            self.gripper_left_crank.set_data([geom['A'][0], geom['P0'][0]], 
+                                              [geom['A'][1], geom['P0'][1]])
+            
+            # Biela P0→P1
+            self.gripper_left_link.set_data([geom['P0'][0], geom['P1'][0]], 
+                                             [geom['P0'][1], geom['P1'][1]])
+            
+            # Haste B→P1
+            self.gripper_left_rod.set_data([geom['B'][0], geom['P1'][0]], 
+                                            [geom['B'][1], geom['P1'][1]])
+            
+            # Dedo P1→P2→P3
+            self.gripper_left_finger.set_data([geom['P1'][0], geom['P2'][0], geom['P3'][0]], 
+                                               [geom['P1'][1], geom['P2'][1], geom['P3'][1]])
+            
+            # ===== LADO DIREITO =====
+            self.gripper_right_crank.set_data([geom['A_R'][0], geom['P0_R'][0]], 
+                                               [geom['A_R'][1], geom['P0_R'][1]])
+            
+            self.gripper_right_link.set_data([geom['P0_R'][0], geom['P1_R'][0]], 
+                                              [geom['P0_R'][1], geom['P1_R'][1]])
+            
+            self.gripper_right_rod.set_data([geom['B_R'][0], geom['P1_R'][0]], 
+                                             [geom['B_R'][1], geom['P1_R'][1]])
+            
+            self.gripper_right_finger.set_data([geom['P1_R'][0], geom['P2_R'][0], geom['P3_R'][0]], 
+                                                [geom['P1_R'][1], geom['P2_R'][1], geom['P3_R'][1]])
+            
+            # ===== CHASSIS (estrutura fixa) =====
+            # A ↔ B (esquerda)
+            self.gripper_chassis_AB.set_data([geom['A'][0], geom['B'][0]], 
+                                              [geom['A'][1], geom['B'][1]])
+            
+            # A ↔ -A (horizontal superior)
+            self.gripper_chassis_A_mirror.set_data([geom['A'][0], geom['A_R'][0]], 
+                                                    [geom['A'][1], geom['A_R'][1]])
+            
+            # B ↔ -B (horizontal inferior)
+            self.gripper_chassis_B_mirror.set_data([geom['B'][0], geom['B_R'][0]], 
+                                                    [geom['B'][1], geom['B_R'][1]])
+            
+            # -A ↔ -B (direita)
+            self.gripper_chassis_mirror.set_data([geom['A_R'][0], geom['B_R'][0]], 
+                                                  [geom['A_R'][1], geom['B_R'][1]])
+            
+            
+            # ===== PIVÔS =====
+            self.gripper_pivots_A.set_data([geom['A'][0], geom['A_R'][0]], 
+                                            [geom['A'][1], geom['A_R'][1]])
+            
+            self.gripper_pivots_B.set_data([geom['B'][0], geom['B_R'][0]], 
+                                            [geom['B'][1], geom['B_R'][1]])
+            
+            # ===== ABERTURA =====
+            self.gripper_opening_line.set_data([geom['P3'][0], geom['P3_R'][0]], 
+                                                [geom['P3'][1], geom['P3_R'][1]])
+            
+            # ===== TEXTO =====
+            opening_mm = geom['opening']
+            self.gripper_text.set_text(
+                f'Abertura: {opening_mm:.1f} mm | Servo: {servo_angle_deg:.0f}°'
+            )
+            
+            # Redesenhar
+            self.canvas_positioning.draw_idle()
+            
+        except Exception as e:
+            print(f"Erro ao atualizar garra: {e}")

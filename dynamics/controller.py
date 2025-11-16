@@ -76,11 +76,13 @@ class CalculatedTorqueController:
         self.counter  = 0
     
     """--------------------------- Escalando os ganhos ---------------------------"""
-    def set_gain_factors(self, Kp_scaling_factor=0.050, Kd_scaling_factor=0.150, Ki_scaling_factor=0.001):
+    def set_gain_factors(self, Kp_scaling_factor=0.050, Kd_scaling_factor=0.150, Ki_scaling_factor=0.001, Kt=1):
         """Definindo os fatores de escala para os ganhos"""
         self.Kp_scaling_factor = Kp_scaling_factor
         self.Kd_scaling_factor = Kd_scaling_factor
         self.Ki_scaling_factor = Ki_scaling_factor
+        self.Kt_ganho = Kt
+        
         self.calculate_gains()
 
         # --- estado de medição externa (ESP32) ---
@@ -120,7 +122,6 @@ class CalculatedTorqueController:
             #Estado para a diferenciação numérica
             self.last_q_real = q.copy()
             self.last_qd_real = np.zeros(3, dtype=float)
-
     
     """--------------------------- Cálculo dos ganhos ---------------------------"""
     def calculate_gains(self):
@@ -129,8 +130,7 @@ class CalculatedTorqueController:
         self.Kd = self.Kd_scaling_factor * np.diag(3*[2*self.zeta*self.wn + self.p])                # scaling_factor: 0.150 (!!)
         self.Ki = self.Ki_scaling_factor * np.diag(3*[self.wn**2*self.p])
 
-        self.Kt_ganho = 1
-        
+        # self.Kt_ganho = 1
         self.Kt = self.Kt_ganho * np.identity(3)
     
     """

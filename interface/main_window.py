@@ -102,11 +102,6 @@ class RobotControlInterface(QMainWindow):
         self.last_meas = None
         self.last_meas_t = None
 
-        # Pegando os dados do slider só depois do gripper ficar pronto
-        # self.gripper_slider.valueChanged.connect(self.on_gripper_slider_changed)
-        # enquanto isso recebo dado de outro lugar
-        self.initial_q1.textChanged.connect(self.on_gripper_slider_changed)
-
     """--------------------------- Inicialização das outras Classes ---------------------------"""
     def init_components(self):
         """Inicializar componentes"""
@@ -293,22 +288,22 @@ class RobotControlInterface(QMainWindow):
         layout.addWidget(self.endeffector_gain, 0, 1)
 
         # Botões                                                # (Linhas 3-6): Botões ("trajetória", "simular", "parar", "robô")
-        self.btn_endeffector = QPushButton("Abrir Garra")
-        # Adotar o estilo do botão
-        button_style = """
-            QPushButton {
-                padding: 4px 8px;
-                font-size: 11px;
-                min-height: 20px;
-                max-height: 25px;
-            }
-        """
-        self.btn_endeffector.setStyleSheet(button_style)
-        layout.addWidget(self.btn_endeffector)
-
-        # Posicionamento
-        layout.addWidget(self.btn_endeffector, 1, 0, 1, 2)
-
+        self.gripper_label = QLabel("Abertura Garra:")
+        layout.addWidget(self.gripper_label, 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        
+        self.gripper_slider = QSlider(Qt.Orientation.Horizontal)
+        self.gripper_slider.setMinimum(0)                       # Valor mínimo (garra fechada)
+        self.gripper_slider.setMaximum(88)                      # Valor máximo (garra aberta)
+        self.gripper_slider.setValue(0)                         # Valor inicial
+        self.gripper_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.gripper_slider.setTickInterval(10)
+        layout.addWidget(self.gripper_slider, 1, 1, Qt.AlignmentFlag.AlignBottom)
+        
+        # Label para mostrar o valor atual
+        self.gripper_value_label = QLabel("0º")
+        layout.addWidget(self.gripper_value_label, 1, 2, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(QLabel("        "), 0, 2, Qt.AlignmentFlag.AlignLeft)          # Só pra ajustar espaçamento...
+        
         return group
 
     """--------------------------- 1.2) Painel de Controle -> Campo de Trajetória ---------------------------"""
@@ -504,6 +499,7 @@ class RobotControlInterface(QMainWindow):
             self.tabs.addTab(self.robot_plot.canvas_time_evolution, "Evolução Temporal")
             self.tabs.addTab(self.robot_plot.canvas_errors, "Erros")
             self.tabs.addTab(self.robot_plot.canvas_forces, "Forças|Torques")
+
         except Exception as e:
             error_label = QLabel(f"Erro: {str(e)}")
             error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -532,7 +528,8 @@ class RobotControlInterface(QMainWindow):
             self.use_controller.clicked.connect(self.update_controller)
             self.radio_joint.toggled.connect(self.update_position_labels)
             # self.btn_send_to_robot.clicked.connect(self.send_to_robot)
-            self.btn_endeffector.clicked.connect(self.update_endeffector_position)
+            self.gripper_slider.valueChanged.connect(self.on_gripper_slider_changed)
+            self.tabs.currentChanged.connect(self.on_tab_changed)
 
             # Entradas dados: Atualização dos dados (tempo real): textChanged
             self.initial_q1.textChanged.connect(self.update_coordenate_system)
@@ -546,7 +543,7 @@ class RobotControlInterface(QMainWindow):
             self.Kp_field.textChanged.connect(self.update_gains)
             self.Kd_field.textChanged.connect(self.update_gains)
             self.Ki_field.textChanged.connect(self.update_gains)
-            self.endeffector_gain.textChanged.connect(self.update_endeffector_gain)
+            self.endeffector_gain.textChanged.connect(self.update_gains)
             
             # Conecta com a Thread de simulation_thread.py
             # Quando os sinais chegam, as funções de update são acionadas
@@ -1215,93 +1212,54 @@ class RobotControlInterface(QMainWindow):
             Kp_scaling_factor = float(self.Kp_field.text())
             Kd_scaling_factor = float(self.Kd_field.text())
             Ki_scaling_factor = float(self.Ki_field.text())
+            Kt = float(self.endeffector_gain.text())
 
-            self.controller.set_gain_factors(Kp_scaling_factor, Kd_scaling_factor, Ki_scaling_factor)
+            self.controller.set_gain_factors(Kp_scaling_factor, Kd_scaling_factor, Ki_scaling_factor, Kt)
             
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao atualizar os ganhos: {str(e)}")
 
-<<<<<<< HEAD
-    """"-------------------- Daddos do gripper ---------------"""
-
-    # --- Código para usar com slider ---
-    # def on_gripper_slider_changed(self, value: int):
-    #     """
-    #     Chamada SEMPRE que o slider da garra mudar.
-    #     """
-    #     
-    #     # Isso garante que o 'run()' sempre terá o valor mais recente
-    #     if hasattr(self, "simulation_thread"):
-    #          self.simulation_thread.set_current_gripper_value(value)
-    #
-    #     # Lógica de Envio
-    #     if self.simulation_thread and self.simulation_thread.is_running:
-    #         # ...
-    #         pass
-    #     else:
-    #         # Simulação PARADA: Envie o comando "direto"
-    #         command = {
-    #             "cmd": "set_gripper", # O comando separado
-    #             "value": value
-    #         }
-    #         self.send_esp32_json(command)
-
-    # --- C[odigo de teste ---
-    def on_gripper_slider_changed(self): # <<< MODIFICADO: Não recebe 'value'
+    """--------------------------- 2.10) Funções de Update -> Ganho da Garra ---------------------------"""
+    def on_gripper_slider_changed(self, value: int):
         """
-        Chamada SEMPRE que o TEXTO em 'initial_q1' mudar.
-        (Função original do slider comentada acima)
+        Chamada SEMPRE que o slider da garra mudar.
         """
-        
-        # 1. PEGA o valor da caixa de texto e CONVERTE (como você sugeriu)
-        try:
-            value = int(float(self.initial_q1.text())) # <<< MODIFICADO
-        except ValueError:
-            value = 0 # Se o texto for inválido (ex: "abc" ou vazio)
-
-        # 2. A SUA LÓGICA ORIGINAL (copiada de cima, sem mudanças)
+        self.gripper_value_label.setText(f"{value}º")
+        if hasattr(self, 'robot_plot'):
+            self.robot_plot.update_gripper_plot(value)
+        # Isso garante que o 'run()' sempre terá o valor mais recente
         if hasattr(self, "simulation_thread"):
              self.simulation_thread.set_current_gripper_value(value)
-
+    
         # Lógica de Envio
-        if self.simulation_thread and self.simulation_thread.is_running:
-            pass
-        else:
+        if not (self.simulation_thread and self.simulation_thread.is_running):
+            # Simulação PARADA: Envie o comando "direto"
             command = {
-                "cmd": "set_gripper",
+                "cmd": "set_gripper", # O comando separado
                 "value": value
             }
             self.send_esp32_json(command)
     
-    """"-------------------- Comunicação ---------------"""
-=======
-    """--------------------------- 2.9) Funções de Update -> Ganho da Garra ---------------------------"""
-    def update_endeffector_gain(self):
-        try:
-            if not self.initial_validation(block=False):
-                return
-            
-            if not hasattr(self, "controller") or self.controller:
-                return
-            
-            gain = float(self.endeffector_gain.text())
-
-            # Chamar alguma função para atualizar o Gain        [!!!]
-            # self.<>.set_endeffector_gain(gain)
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro ao atualizar os ganhos: {str(e)}")
-
-    """--------------------------- 2.10) Funções de Update -> Abrir/Fechar a Garra ---------------------------"""
-    def update_endeffector_position(self):
-        pass
+    """--------------------------- 2.11) Funções de Update -> Em que aba estou? ---------------------------"""
+    def on_tab_changed(self, index):
+        """Callback quando muda de aba"""
+        self.robot_plot.set_active_tab(index)
+        
+        # Força redesenho da aba recém-ativada
+        if index == 0:
+            self.robot_plot.canvas_positioning.draw()
+        elif index == 1:
+            self.robot_plot.canvas_time_evolution.draw()
+        elif index == 2:
+            self.robot_plot.canvas_errors.draw()
+        elif index == 3:
+            self.robot_plot.canvas_forces.draw()
 
     """
     =================================================================================================================
                                                 2) Comunicação
     =================================================================================================================
     """
->>>>>>> ba20fdd (adding end-effector button)
 
    # ===== Servidor no PC =====
     def start_esp32_server(self, port: int = 9000):
@@ -1316,7 +1274,6 @@ class RobotControlInterface(QMainWindow):
     def send_esp32_json(self, payload: dict):
         self.srv.send_json(payload)
 
-   
     def connect_esp32(self, host: str, port: int):
         # host é ignorado: o servidor escuta em 0.0.0.0:port
         self.start_esp32_server(port)
@@ -1380,8 +1337,6 @@ class RobotControlInterface(QMainWindow):
 
         # fallback
         self.update_status(f"RX json: {obj}")
-
-
 
     """
     =================================================================================================================
