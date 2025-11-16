@@ -102,11 +102,10 @@ class RobotControlInterface(QMainWindow):
         self.last_meas = None
         self.last_meas_t = None
 
-        # <<< MODIFICADO: Adiciona armazenamento para qd e qdd
-        self.last_meas_qdd = None
-        self.last_meas_qdd2 = None
-        self.last_meas_i = None
-
+        # Pegando os dados do slider só depois do gripper ficar pronto
+        # self.gripper_slider.valueChanged.connect(self.on_gripper_slider_changed)
+        # enquanto isso recebo dado de outro lugar
+        self.initial_q1.textChanged.connect(self.on_gripper_slider_changed)
 
     """--------------------------- Inicialização das outras Classes ---------------------------"""
     def init_components(self):
@@ -1178,6 +1177,57 @@ class RobotControlInterface(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao atualizar os ganhos: {str(e)}")
 
+    """"-------------------- Daddos do gripper ---------------"""
+
+    # --- Código para usar com slider ---
+    # def on_gripper_slider_changed(self, value: int):
+    #     """
+    #     Chamada SEMPRE que o slider da garra mudar.
+    #     """
+    #     
+    #     # Isso garante que o 'run()' sempre terá o valor mais recente
+    #     if hasattr(self, "simulation_thread"):
+    #          self.simulation_thread.set_current_gripper_value(value)
+    #
+    #     # Lógica de Envio
+    #     if self.simulation_thread and self.simulation_thread.is_running:
+    #         # ...
+    #         pass
+    #     else:
+    #         # Simulação PARADA: Envie o comando "direto"
+    #         command = {
+    #             "cmd": "set_gripper", # O comando separado
+    #             "value": value
+    #         }
+    #         self.send_esp32_json(command)
+
+    # --- C[odigo de teste ---
+    def on_gripper_slider_changed(self): # <<< MODIFICADO: Não recebe 'value'
+        """
+        Chamada SEMPRE que o TEXTO em 'initial_q1' mudar.
+        (Função original do slider comentada acima)
+        """
+        
+        # 1. PEGA o valor da caixa de texto e CONVERTE (como você sugeriu)
+        try:
+            value = int(float(self.initial_q1.text())) # <<< MODIFICADO
+        except ValueError:
+            value = 0 # Se o texto for inválido (ex: "abc" ou vazio)
+
+        # 2. A SUA LÓGICA ORIGINAL (copiada de cima, sem mudanças)
+        if hasattr(self, "simulation_thread"):
+             self.simulation_thread.set_current_gripper_value(value)
+
+        # Lógica de Envio
+        if self.simulation_thread and self.simulation_thread.is_running:
+            pass
+        else:
+            command = {
+                "cmd": "set_gripper",
+                "value": value
+            }
+            self.send_esp32_json(command)
+    
     """"-------------------- Comunicação ---------------"""
 
    # ===== Servidor no PC =====
@@ -1220,17 +1270,13 @@ class RobotControlInterface(QMainWindow):
 
         if "meas_q" in obj:
             meas_q = obj.get("meas_q")
-            meas_qdd = obj.get("meas_qdd")   # Espera-se que a ESP envie isso
-            meas_qdd2 = obj.get("meas_qdd2")
-            meas_i = obj.get("meas_i")
+            meas_gripper = obj.get("meas_gripper")
             tval = obj.get("t")
 
-            # --- Validação Mínima ---
-            if meas_qdd is None or meas_qdd2 is None or meas_i is None:
-                self.update_status(f"Erro RX: Pacote 'meas_q' recebido, mas 'meas_qdd', 'meas_qdd2' ou meas_i ausentes.")
+            if meas_q is None or meas_gripper is None:
+                self.update_status(f"Erro RX: Pacote 'meas_q' ou 'meas_gripper' ausentes.")
                 return
 
-            # --- filtro: ignore pacote q = [0,0,0] ---
             try:
                 if isinstance(meas_q, list) and len(meas_q) >= 3:
                     all_zero = (float(meas_q[0]) == 0.0 and float(meas_q[1]) == 0.0 and float(meas_q[2]) == 0.0)
@@ -1241,12 +1287,9 @@ class RobotControlInterface(QMainWindow):
                 pass
 
             self.last_meas = meas_q
-            self.last_meas_qdd = meas_qdd
-            self.last_meas_qdd2 = meas_qdd2
-            self.last_meas_i = meas_i
+            self.last_meas_gripper = meas_gripper
             self.last_meas_t = tval
 
-            # entrega para a thread de simulação (slot thread-safe)
             if hasattr(self, "simulation_thread") and self.simulation_thread is not None:
                 try:
                     t_num = float(tval) if tval is not None else 0.0
@@ -1254,11 +1297,9 @@ class RobotControlInterface(QMainWindow):
                     t_num = 0.0
                 
                 self.simulation_thread.ingest_meas_sig.emit(
-                    self.last_meas,       # q
-                    self.last_meas_qdd,    # qdd
-                    self.last_meas_qdd2,   # qdd2
-                    self.last_meas_i,     # i
-                    t_num                 # t
+                    self.last_meas,         # q
+                    self.last_meas_gripper, # gripper
+                    t_num                   # t
                 )
 
             self.update_status(f"RX meas (q): {self.last_meas}")

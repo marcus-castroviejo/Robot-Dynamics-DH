@@ -30,6 +30,13 @@ class CalculatedTorqueController:
         self.setup_controller()
         self.set_gain_factors()
 
+
+        # Usado para fazer a diferenciação númerica.
+        self.last_q_real = np.array([0.0, 0.0, 0.0])
+        self.last_qd_real = np.array([0.0, 0.0, 0.0])
+
+
+
     
     """
     =================================================================================================================
@@ -86,13 +93,11 @@ class CalculatedTorqueController:
         self._meas_qdd = None
 
     # <<< MODIFICADO: A assinatura da função mudou para aceitar qd e qdd
-    def set_measurement(self, q_meas, qd_meas, qdd_meas, t=None):
+    def set_measurement(self, q_meas, t=None):
         """Recebe medição das juntas (ESP32)."""
         self.use_external_meas = True
 
         q = np.asarray(q_meas, dtype=float).reshape(3)
-        qd = np.asarray(qd_meas, dtype=float).reshape(3)    # <<< MODIFICADO
-        qdd = np.asarray(qdd_meas, dtype=float).reshape(3)  # <<< MODIFICADO
 
         # 1) filtro anti-bursts do início (evita salto inicial)
         if np.allclose(q, 0.0, atol=1e-9):
@@ -101,20 +106,20 @@ class CalculatedTorqueController:
         # 2) registra medição atual
         self._meas_q = q
         self._meas_t = float(t) if t is not None else None
-        self._meas_qd = qd    # <<< MODIFICADO
-        self._meas_qdd = qdd  # <<< MODIFICADO
 
         # 3) primeira amostra válida: alinhar estados do modelo
         if len(self.q_real) == 1 and self.counter == 0:
             # posição real inicial = medição
             self.q_real[0]  = q.copy()
             # zera velocidade e aceleração iniciais do modelo
-            self.qd_real[0] = qd.copy()  # <<< MODIFICADO
-            self.qdd_real[0]= qdd.copy() # <<< MODIFICADO
+            self.qd_real[0] = np.zeros(3, dtype=float)
+            self.qdd_real[0]= np.zeros(3, dtype=float)
             # zera integral do erro
             self.e_int = np.zeros(3, dtype=float)
 
-
+            #Estado para a diferenciação numérica
+            self.last_q_real = q.copy()
+            self.last_qd_real = np.zeros(3, dtype=float)
 
     
     """--------------------------- Cálculo dos ganhos ---------------------------"""
@@ -122,7 +127,11 @@ class CalculatedTorqueController:
         """Ganhos Kp, Kd e Ki"""
         self.Kp = self.Kp_scaling_factor * np.diag(3*[self.wn**2 + 2*self.zeta*self.wn*self.p])     # scaling_factor: 0.050 (!!)
         self.Kd = self.Kd_scaling_factor * np.diag(3*[2*self.zeta*self.wn + self.p])                # scaling_factor: 0.150 (!!)
-        self.Ki = self.Ki_scaling_factor * np.diag(3*[self.wn**2*self.p])                           # scaling_factor: 0.001 (!!)
+        self.Ki = self.Ki_scaling_factor * np.diag(3*[self.wn**2*self.p])
+
+        self.Kt_ganho = 1
+        
+        self.Kt = self.Kt_ganho * np.identity(3)
     
     """
     =================================================================================================================
@@ -133,13 +142,17 @@ class CalculatedTorqueController:
     """--------------------------- Update do controlador ---------------------------"""
     def update_control_position(self):
         """
-        <<< LÓGICA V3 (MODIFICADA) >>>
-        - q_real, qd_real, qdd_real = medição (ESP32)
-        - O controlador calcula o 'tau' necessário com base nesses estados medidos.
-        - Não há mais integração interna ou "modelo sombra".
+        - Recebe q_real (medição)
+        - Calcula qd_real e qdd_real (diferenciação)
+        - Calcula tau (Torque Calculado)
+        - Calcula q_command (Comando de Posição via Mola Virtual)
         """
         # 1) passo temporal
         dt = self.dt[self.counter]
+
+        # Como é diferenciação isso evita dividir por zero.
+        if dt <= 1e-9: 
+            dt = 1e-9
 
         # 2) referência (trajetória)
         q_traj  = np.array(self.q_traj[self.counter])
@@ -151,73 +164,46 @@ class CalculatedTorqueController:
             raise RuntimeError("sem_medidoes")
 
         # 4) estados: Posição, Velocidade e Aceleração REAIS = medição
-        #    (No V2, qd e qdd vinham de um modelo interno)
         q_real   = np.array(self._meas_q, dtype=float)
-        qd_real  = np.array(self._meas_qd, dtype=float)   # <<< MODIFICADO
-        qdd_real = np.array(self._meas_qdd, dtype=float)  # <<< MODIFICADO
 
-        # 5) erros (usando estados medidos)
+        # 5) Calculo da velocidade e aceleração usando diferenciação numérica
+        qd_real = (q_real - self.last_q_real) / dt
+        qdd_real = (qd_real - self.last_qd_real) / dt
+
+        # 6) erros (usando estados medidos e calculados)
         e_pos = q_traj - q_real
         e_vel = qd_traj - qd_real                         # <<< MODIFICADO
         e_acc = qdd_traj - qdd_real                     # (Erro de aceleração, se necessário)
         self.e_int += e_pos * dt
 
-        # 6) dinâmica no estado medido (q_real, qd_real)
-        #    (Passamos qdd_real para manter a assinatura da função, como na V1)
-        M, C, G = self.robot.calculate_dynamics(list(q_real), list(qd_real), list(qdd_real)) # <<< MODIFICADO
+        # 7) dinâmica no estado medido (q_real, qd_real)
+        M, C, G = self.robot.calculate_dynamics(list(q_real), list(qd_real), list(qdd_real))
         M = np.array(M, dtype=np.float64)
         C = np.array(C, dtype=np.float64)
         G = np.array(G, dtype=np.float64).flatten()
 
-        # 7) torque calculado (Computed Torque)
-        #    Usa os erros medidos para calcular o torque.
+        # 8) torque calculado (Computed Torque)
+        # Usa os erros medidos para calcular o torque.
         tau = M @ (qdd_traj + self.Kd @ e_vel + self.Kp @ e_pos + self.Ki @ self.e_int) + C @ qd_real + G 
-        # 8) <<< MODIFICADO: LÓGICA DE INTEGRAÇÃO REMOVIDA >>>
-        #    O estado "real" agora é o que vem da medição.
-        #    Não precisamos mais calcular o 'qdd_model' ou integrar 'qd_new'.
         
-        # =========================================================================
-        # --- Início da Lógica Antiga (V1) Comentada (PARA COMPARAÇÃO) ---
-        # =========================================================================
-        # # Na V1, os estados reais vinham do loop anterior
-        # q_real_v1_anterior = np.array(self.q_real[-1])
-        # qd_real_v1_anterior = np.array(self.qd_real[-1])
-        #
-        # # Os erros eram calculados com base nesses estados internos
-        # error_v1 = q_traj - q_real_v1_anterior
-        # e_dot_v1 = qd_traj - qd_real_v1_anterior
-        # self.e_int += error_v1 * dt
-        #
-        # # O torque era calculado
-        # tau_v1 = M @ (qdd_traj + self.Kd @ e_dot_v1 + self.Kp @ error_v1 + self.Ki @ self.e_int) + C @ qd_real_v1_anterior + G
-        #
-        # # A aceleração real era DESCOBERTA a partir do torque
-        # qdd_real_v1 = np.linalg.solve(M, tau_v1 - C @ qd_real_v1_anterior - G)
-        #
-        # # E então, a nova posição e velocidade eram CALCULADAS por integração
-        # q_real_v1, qd_real_v1 = self.integrate_runge_kutta4(q_real_v1_anterior, qd_real_v1_anterior, qdd_real_v1, dt)
-        #
-        # # E salvas
-        # self.qdd_real.append(qdd_real_v1)
-        # self.qd_real.append(qd_real_v1)
-        # self.q_real.append(q_real_v1)
-        # =========================================================================
-        # --- Fim da Lógica Antiga (V1) Comentada ---
-        # =========================================================================
+        # 9) Calcula a posição de comando a partir do torque calculado
+        q_command = q_real + self.Kt @ tau
 
+        # 10) salva valores para a próxima derivada
+        self.last_q_real = q_real.copy()
+        self.last_qd_real = qd_real.copy()
 
-        # 9) salvar histórico (agora salvando os dados MEDIDOS)
+        # 11) salvar histórico (agora salvando os dados MEDIDOS)
         self.errors.append(e_pos)
         self.tau.append(tau)
         self.qdd_real.append(qdd_real)  # <<< MODIFICADO
         self.qd_real.append(qd_real)    # <<< MODIFICADO
         self.q_real.append(q_real)
 
-        # 10) avança
+        # 12) avança
         self.counter += 1
 
-        # <<< MODIFICADO: Retorna os estados reais (medidos)
-        return (q_real, qd_real, qdd_real, e_pos, e_vel, e_acc, tau) # removi e_acc
+        return (q_command, q_real, qd_real, qdd_real, e_pos, e_vel, e_acc, tau)
 
     """
     =================================================================================================================
