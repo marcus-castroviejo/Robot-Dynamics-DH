@@ -65,7 +65,6 @@ class SimulationThread(QThread):
 
         # Adicionar o dado do gripper para receber e envia-lo durante a simulação
         self.next_gripper_command = 0
-        self.current_gripper_value = 0
 
         self._rx_seq = 0
         self.sync_timeout_s = 2.0
