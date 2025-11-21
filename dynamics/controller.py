@@ -6,6 +6,12 @@
     - A trajetória desejada é configurada ao se iniciar a simulação
     - O controle de posição é realizado à cada iteração de SimulationThread.run() através de update_control_position()
 
+Características:
+- Recebe medições de posição da ESP32 (via CommunicationManager)
+- Calcula velocidade e aceleração por diferenciação numérica
+- Lei de controle: τ = M(q̈_d + Kd·ė + Kp·e + Ki·∫e) + C·q̇ + G
+- Comando de posição via mola virtual: q_cmd = q + Kt·τ
+
 Campos deste código:
 ["Setup Inicial"]:                      Inicialização
 ["Configuraçōes do Controlador"]:       Especificações, Ganhos e Trajetória
@@ -25,18 +31,15 @@ class CalculatedTorqueController:
     
     """--------------------------- __init__() ---------------------------"""
     def __init__(self, robot):
+        """Inicializa o controlador"""
         # Robô
         self.robot = robot
         self.setup_controller()
         self.set_gain_factors()
 
-
         # Usado para fazer a diferenciação númerica.
         self.last_q_real = np.array([0.0, 0.0, 0.0])
         self.last_qd_real = np.array([0.0, 0.0, 0.0])
-
-
-
     
     """
     =================================================================================================================
@@ -46,7 +49,7 @@ class CalculatedTorqueController:
 
     """--------------------------- Especificações ---------------------------"""
     def setup_controller(self):
-        """Especificações do sistema"""
+        """Especificações do sistema de controle"""
         self.ts = 0.3                           # Settling time: 5% tolerância
         self.zeta = 0.59                        # Overshoot: 10%
 
@@ -56,7 +59,7 @@ class CalculatedTorqueController:
 
     """--------------------------- Trajetória desejada ---------------------------"""
     def set_trajectory(self, trajectory):
-        """Definindo a trajetória"""
+        """Definindo a trajetória desejada"""
         # Trajetória
         self.t = [point[0] for point in trajectory]
         self.dt = list(np.diff([self.t[0]] + self.t))
@@ -75,6 +78,16 @@ class CalculatedTorqueController:
 
         self.counter  = 0
     
+    """--------------------------- Cálculo dos ganhos ---------------------------"""
+    def calculate_gains(self):
+        """Ganhos Kp, Kd e Ki"""
+        self.Kp = self.Kp_scaling_factor * np.diag(3*[self.wn**2 + 2*self.zeta*self.wn*self.p])     # scaling_factor: 0.050 (!!)
+        self.Kd = self.Kd_scaling_factor * np.diag(3*[2*self.zeta*self.wn + self.p])                # scaling_factor: 0.150 (!!)
+        self.Ki = self.Ki_scaling_factor * np.diag(3*[self.wn**2*self.p])
+
+        # self.Kt_ganho = 1
+        self.Kt = self.Kt_ganho * np.identity(3)
+
     """--------------------------- Escalando os ganhos ---------------------------"""
     def set_gain_factors(self, Kp_scaling_factor=0.050, Kd_scaling_factor=0.150, Ki_scaling_factor=0.001, Kt=1):
         """Definindo os fatores de escala para os ganhos"""
@@ -82,7 +95,6 @@ class CalculatedTorqueController:
         self.Kd_scaling_factor = Kd_scaling_factor
         self.Ki_scaling_factor = Ki_scaling_factor
         self.Kt_ganho = Kt
-        
         self.calculate_gains()
 
         # --- estado de medição externa (ESP32) ---
@@ -90,13 +102,9 @@ class CalculatedTorqueController:
         self._meas_q = None
         self._meas_t = None
         
-        # <<< MODIFICADO: Adiciona buffers para velocidade e aceleração
-        self._meas_qd = None 
-        self._meas_qdd = None
-
-    # <<< MODIFICADO: A assinatura da função mudou para aceitar qd e qdd
+    """--------------------------- Estados reais das juntas ---------------------------"""
     def set_measurement(self, q_meas, t=None):
-        """Recebe medição das juntas (ESP32)."""
+        """Recebe medição de posição das juntas (da ESP32 via CommunicationManager)"""
         self.use_external_meas = True
 
         q = np.asarray(q_meas, dtype=float).reshape(3)
@@ -111,27 +119,17 @@ class CalculatedTorqueController:
 
         # 3) primeira amostra válida: alinhar estados do modelo
         if len(self.q_real) == 1 and self.counter == 0:
-            # posição real inicial = medição
+            # Define Posição real inicial = medição
             self.q_real[0]  = q.copy()
-            # zera velocidade e aceleração iniciais do modelo
+            # Zera velocidade e aceleração iniciais do modelo
             self.qd_real[0] = np.zeros(3, dtype=float)
             self.qdd_real[0]= np.zeros(3, dtype=float)
-            # zera integral do erro
+            # Zera integral do erro
             self.e_int = np.zeros(3, dtype=float)
-
-            #Estado para a diferenciação numérica
+            # Estado inicial para a diferenciação numérica
             self.last_q_real = q.copy()
             self.last_qd_real = np.zeros(3, dtype=float)
     
-    """--------------------------- Cálculo dos ganhos ---------------------------"""
-    def calculate_gains(self):
-        """Ganhos Kp, Kd e Ki"""
-        self.Kp = self.Kp_scaling_factor * np.diag(3*[self.wn**2 + 2*self.zeta*self.wn*self.p])     # scaling_factor: 0.050 (!!)
-        self.Kd = self.Kd_scaling_factor * np.diag(3*[2*self.zeta*self.wn + self.p])                # scaling_factor: 0.150 (!!)
-        self.Ki = self.Ki_scaling_factor * np.diag(3*[self.wn**2*self.p])
-
-        # self.Kt_ganho = 1
-        self.Kt = self.Kt_ganho * np.identity(3)
     
     """
     =================================================================================================================
@@ -142,77 +140,85 @@ class CalculatedTorqueController:
     """--------------------------- Update do controlador ---------------------------"""
     def update_control_position(self):
         """
-        - Recebe q_real (medição)
-        - Calcula qd_real e qdd_real (diferenciação)
-        - Calcula tau (Torque Calculado)
-        - Calcula q_command (Comando de Posição via Mola Virtual)
+        Atualiza a lei de controle
+
+        Fluxo:
+        1. Obtém trajetória desejada (q_d, qd_d, qdd_d)
+        2. Obtém posição medida (q) da ESP32
+        3. Calcula velocidade (qd) e aceleração (qdd) por diferenciação
+        4. Calcula erros (e, ed, edd)
+        5. Calcula dinâmica (M, C, G) no estado real
+        6. Calcula torque: τ = M(qdd_d + PID) + C·qd + G
+        7. Calcula comando via mola virtual: q_cmd = q + Kt·τ
+        
+        Returns:
+            tuple: (q_command, q_real, qd_real, qdd_real, e_pos, e_vel, e_acc, tau)
         """
         # 1) passo temporal
         dt = self.dt[self.counter]
-
-        # Como é diferenciação isso evita dividir por zero.
-        if dt <= 1e-9: 
+        if dt <= 1e-9:                      # Como é diferenciação isso evita dividir por zero.
             dt = 1e-9
 
-        # 2) referência (trajetória)
+        # 2) Referência (trajetória desejada)
         q_traj  = np.array(self.q_traj[self.counter])
         qd_traj = np.array(self.qd_traj[self.counter])
         qdd_traj= np.array(self.qdd_traj[self.counter])
 
-        # 3) exigir medição
-        if self._meas_q is None: # <<< Assume que qd e qdd chegam junto com q
+        # 3) Exige medição disponível
+        if self._meas_q is None:
             raise RuntimeError("sem_medidoes")
 
-        # 4) estados: Posição, Velocidade e Aceleração REAIS = medição
+        # 4) Estados Reais: Posição, Velocidade e Aceleração [medição da ESP32]
         q_real   = np.array(self._meas_q, dtype=float)
 
-        # 5) Calculo da velocidade e aceleração usando diferenciação numérica
+        # 5) Diferenciação numérica: cálculo da velocidade e aceleração
         qd_real = (q_real - self.last_q_real) / dt
         qdd_real = (qd_real - self.last_qd_real) / dt
 
-        # 6) erros (usando estados medidos e calculados)
+        # 6) Erros (usando estados medidos e calculados)
         e_pos = q_traj - q_real
-        e_vel = qd_traj - qd_real                         # <<< MODIFICADO
-        e_acc = qdd_traj - qdd_real                     # (Erro de aceleração, se necessário)
+        e_vel = qd_traj - qd_real
+        e_acc = qdd_traj - qdd_real
         self.e_int += e_pos * dt
 
-        # 7) dinâmica no estado medido (q_real, qd_real)
+        # 7) Dinâmica no estado medido (q_real, qd_real, qdd_real)
         M, C, G = self.robot.calculate_dynamics(list(q_real), list(qd_real), list(qdd_real))
         M = np.array(M, dtype=np.float64)
         C = np.array(C, dtype=np.float64)
         G = np.array(G, dtype=np.float64).flatten()
 
-        # 8) torque calculado (Computed Torque)
-        # Usa os erros medidos para calcular o torque.
+        # 8) Torque Calculado (Computed Torque)
+        # Lei de controle: τ = M(q̈_d + Kd·ė + Kp·e + Ki·∫e) + C·q̇ + G
         tau = M @ (qdd_traj + self.Kd @ e_vel + self.Kp @ e_pos + self.Ki @ self.e_int) + C @ qd_real + G 
         
-        # 9) Calcula a posição de comando a partir do torque calculado
+        # 9) Comando de Posição via Mola Virtual
+        # Converte torque em deslocamento de posição
         q_command = q_real + self.Kt @ tau
 
         # 10) salva valores para a próxima derivada
         self.last_q_real = q_real.copy()
         self.last_qd_real = qd_real.copy()
 
-        # 11) salvar histórico (agora salvando os dados MEDIDOS)
+        # 11) Salvar histórico (dados medidos e calculados)
         self.errors.append(e_pos)
         self.tau.append(tau)
-        self.qdd_real.append(qdd_real)  # <<< MODIFICADO
-        self.qd_real.append(qd_real)    # <<< MODIFICADO
+        self.qdd_real.append(qdd_real)
+        self.qd_real.append(qd_real)
         self.q_real.append(q_real)
 
-        # 12) avança
+        # 12) Avança contador de iterações
         self.counter += 1
 
         return (q_command, q_real, qd_real, qdd_real, e_pos, e_vel, e_acc, tau)
 
     """
     =================================================================================================================
-                                                Métodos de Integração
+                                    Métodos de Integração (não são mais utilizados)
     =================================================================================================================
     """
 
-    # (Estes métodos não são mais usados pelo 'update_control_position', 
-    # mas podem ser úteis para outras partes da simulação, então é bom manter)
+    # Estes métodos não são mais usados pelo 'update_control_position', 
+    # mas podem ser úteis para outras partes da simulação, então é bom manter
 
     """--------------------------- Integração: Euler ---------------------------"""
     @staticmethod

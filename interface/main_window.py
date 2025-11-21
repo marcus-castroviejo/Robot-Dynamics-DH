@@ -34,8 +34,8 @@ from PyQt6.QtCore import QLocale, QSignalBlocker
 from dynamics import CocoaBot, CalculatedTorqueController
 from trajectory import TrajectoryGenerator
 from visualization import RobotPlot
-from .simulation_thread import SimulationThread
-from esp32_comm import ESP32Server
+from interface import SimulationThread
+from communication import CommunicationManager
 
 
 
@@ -78,31 +78,7 @@ class RobotControlInterface(QMainWindow):
         self.update_trajectory_params()
         self.update_coordenate_system()
 
-        # Extra: validação própria
-        # print("q0:\t", np.round([np.rad2deg(self.q0[0]), np.rad2deg(self.q0[1]), 100*self.q0[2]], 2))
-        # print("qf:\t", np.round([np.rad2deg(self.qf[0]), np.rad2deg(self.qf[1]), 100*self.qf[2]], 2))
-        # print("pos0:\t", np.round(self.pos0, 2))
-        # print("posf:\t", np.round(self.pos0, 2))
-
-        # --- Servidor TCP (PC) <-> ESP32 ---
-        self.srv = ESP32Server(self)
-
-        self.srv.status.connect(self.update_status)
-        self.srv.error_occurred.connect(self._on_comm_error)
-        self.srv.text_received.connect(self._on_text_line)
-        self.srv.json_received.connect(self._on_json_obj)
-
-        self.srv.client_connected.connect(lambda ip, port: self.update_status(f"ESP32 conectada: {ip}:{port}"))
-        self.srv.client_disconnected.connect(lambda: self.update_status("ESP32 desconectada"))
-        self.srv.server_started.connect(lambda p: self.update_status(f"Servidor iniciado na porta {p}"))
-        self.srv.server_stopped.connect(lambda: self.update_status("Servidor parado"))
-
-        # (opcional) estado para guardar último ref/meas
-        self.last_ref = None
-        self.last_meas = None
-        self.last_meas_t = None
-
-    """--------------------------- Inicialização das outras Classes ---------------------------"""
+    """--------------------------- Inicialização dos Componentes ---------------------------"""
     def init_components(self):
         """Inicializar componentes"""
         try:
@@ -110,12 +86,34 @@ class RobotControlInterface(QMainWindow):
             self.trajectory_gen = TrajectoryGenerator()
             self.simulation_thread = SimulationThread()
             self.trajectory = []
-            self.simulation_thread.tx_json.connect(self.send_esp32_json)
+            # self.simulation_thread.tx_json.connect(self.send_esp32_json)
 
+            # Gerenciador de comunicação (substitui ESP32Server)
+            self.comm_manager = CommunicationManager(self)
+            self._setup_communication_signals()
+            
+            # IMPORTANTE: Injeta o comm_manager na thread
+            self.simulation_thread.set_communication_manager(self.comm_manager)
+            
+            # Visualização
+            self.robot_plot = None  # Será criado em init_ui()
             
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao inicializar componentes: {str(e)}")
     
+    """--------------------------- Configura Sinais de Conexão ---------------------------"""
+    def _setup_communication_signals(self):
+        """Conecta sinais do CommunicationManager"""
+        # Status e erros
+        self.comm_manager.status_message.connect(self.update_status)
+        self.comm_manager.error_occurred.connect(lambda msg: self.update_status(f"Erro ESP32: {msg}"))
+        
+        # Conexão
+        self.comm_manager.connection_changed.connect(self._on_connection_changed)
+        
+        # Medições (apenas para log, se necessário)
+        self.comm_manager.measurement_received.connect(self._on_measurement_received)
+
     """--------------------------- Ajustar o tamanho da Interface ---------------------------"""
     def setup_responsive_window(self):
         """Janela responsiva que se adapta à tela"""
@@ -509,10 +507,10 @@ class RobotControlInterface(QMainWindow):
         layout.addWidget(self.tabs)
         
         return panel
-
+    
     """
     =================================================================================================================
-                                                Métodos Funcionais: Conexão Botões e Sinais
+                                    Métodos Funcionais: Conexão Botões e Sinais
     =================================================================================================================
     """
 
@@ -528,7 +526,7 @@ class RobotControlInterface(QMainWindow):
             self.use_controller.clicked.connect(self.update_controller)
             self.radio_joint.toggled.connect(self.update_position_labels)
             # self.btn_send_to_robot.clicked.connect(self.send_to_robot)
-            self.gripper_slider.valueChanged.connect(self.on_gripper_slider_changed)
+            self.gripper_slider.valueChanged.connect(self.update_gripper)
             self.tabs.currentChanged.connect(self.on_tab_changed)
 
             # Entradas dados: Atualização dos dados (tempo real): textChanged
@@ -965,6 +963,12 @@ class RobotControlInterface(QMainWindow):
             if not self.validate_inputs(block=True):
                 return
 
+            # Verifica conexão
+            if not self.comm_manager.is_connected():
+                QMessageBox.warning(self, "Aviso", "ESP32 não conectada. Inicie o servidor primeiro.")
+                return
+
+            # Reset visualização
             if hasattr(self, 'robot_plot'):
                 self.robot_plot.reset_position_graph()
                 self.robot_plot.reset_positioning_lines()
@@ -1013,9 +1017,35 @@ class RobotControlInterface(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao {action.lower()} simulação: {str(e)}")
     
-    """--------------------------- 1.6) Funções de Controle -> Enviar para o Robô ---------------------------"""
-    def send_to_robot(self):
-        pass
+    """--------------------------- 1.6) Funções de Controle -> Iniciar Servidor ESP 32 ---------------------------"""
+    def start_esp32_server(self, port: int = 9000):
+        """Inicia servidor de comunicação"""
+        if not self.comm_manager.start_server(port):
+            QMessageBox.warning(self, "Erro", "Falha ao iniciar servidor de comunicação")
+    
+    """--------------------------- 1.7) Funções de Controle -> Parar Servidor ESP 32 ---------------------------"""
+    def stop_esp32_server(self):
+        """Para servidor de comunicação"""
+        self.comm_manager.stop_server()
+
+    """--------------------------- 1.8) Funções de Controle -> Log de conexão ESP 32 ---------------------------"""
+    def _on_connection_changed(self, connected: bool):
+        """Handler para mudança de estado de conexão"""
+        if connected:
+            self.update_status("ESP32 conectada")
+        else:
+            self.update_status("ESP32 desconectada")
+    
+    """--------------------------- 1.9) Funções de Controle -> Log de recebimento de dados ---------------------------"""
+    def _on_measurement_received(self, measurement):
+        """
+        Handler para medições recebidas (opcional - apenas para log)
+        
+        Args:
+            measurement: MeasurementData da ESP32
+        """
+        # Log opcional - a SimulationThread já processa as medições
+        self.update_status(f"Medição: q={measurement.q[:2]}, gripper={measurement.gripper}º")
 
     """
     =================================================================================================================
@@ -1089,8 +1119,6 @@ class RobotControlInterface(QMainWindow):
                 QTimer.singleShot(1000, lambda: self.enable_simulation_buttons(False))
         except Exception as e:
             print(f"Erro ao atualizar progresso: {e}")
-    
-        """--------------------------- Em construção (!!!!) ---------------------------"""
     
     """--------------------------- 2.6) Funções de Update -> Parâmetros da Trajetória ---------------------------"""
     def update_trajectory_params(self):
@@ -1220,25 +1248,22 @@ class RobotControlInterface(QMainWindow):
             QMessageBox.critical(self, "Erro", f"Erro ao atualizar os ganhos: {str(e)}")
 
     """--------------------------- 2.10) Funções de Update -> Ganho da Garra ---------------------------"""
-    def on_gripper_slider_changed(self, value: int):
+    def update_gripper(self, value: int):
         """
         Chamada SEMPRE que o slider da garra mudar.
         """
         self.gripper_value_label.setText(f"{value}º")
+        # Atualiza visualização
         if hasattr(self, 'robot_plot'):
             self.robot_plot.update_gripper_plot(value)
-        # Isso garante que o 'run()' sempre terá o valor mais recente
+        
+        # Atualiza valor na thread de simulação
         if hasattr(self, "simulation_thread"):
              self.simulation_thread.set_current_gripper_value(value)
     
-        # Lógica de Envio
+        # Se simulação NÃO está rodando, envia comando direto
         if not (self.simulation_thread and self.simulation_thread.is_running):
-            # Simulação PARADA: Envie o comando "direto"
-            command = {
-                "cmd": "set_gripper", # O comando separado
-                "value": value
-            }
-            self.send_esp32_json(command)
+            self.comm_manager.send_gripper_command(value)
     
     """--------------------------- 2.11) Funções de Update -> Em que aba estou? ---------------------------"""
     def on_tab_changed(self, index):
@@ -1257,89 +1282,6 @@ class RobotControlInterface(QMainWindow):
 
     """
     =================================================================================================================
-                                                2) Comunicação
-    =================================================================================================================
-    """
-
-   # ===== Servidor no PC =====
-    def start_esp32_server(self, port: int = 9000):
-        self.srv.start(port)
-
-    def stop_esp32_server(self):
-        self.srv.stop()
-
-    def send_esp32_text(self, text: str):
-        self.srv.send_text(text)
-
-    def send_esp32_json(self, payload: dict):
-        self.srv.send_json(payload)
-
-    def connect_esp32(self, host: str, port: int):
-        # host é ignorado: o servidor escuta em 0.0.0.0:port
-        self.start_esp32_server(port)
-
-    def disconnect_esp32(self):
-        self.stop_esp32_server()
-
-    # ===== Handlers dos sinais da comunicação =====
-    def _on_comm_error(self, msg: str):
-        self.update_status(f"Erro ESP32: {msg}")
-
-    def _on_text_line(self, line: str):
-        self.update_status(f"RX texto: {line}")
-
-    def _on_json_obj(self, obj: dict):
-        if "pong" in obj:
-            self.update_status("RX json: pong")
-            return
-
-        if "ref" in obj:
-            self.last_ref = obj.get("ref")
-            self.update_status(f"RX json (ref): {self.last_ref}")
-            return
-
-        if "meas_q" in obj:
-            meas_q = obj.get("meas_q")
-            meas_gripper = obj.get("meas_gripper")
-            tval = obj.get("t")
-
-            if meas_q is None or meas_gripper is None:
-                self.update_status(f"Erro RX: Pacote 'meas_q' ou 'meas_gripper' ausentes.")
-                return
-
-            try:
-                if isinstance(meas_q, list) and len(meas_q) >= 3:
-                    all_zero = (float(meas_q[0]) == 0.0 and float(meas_q[1]) == 0.0 and float(meas_q[2]) == 0.0)
-                    if all_zero:
-                        self.update_status("RX meas: Pacote [0,0,0] ignorado")
-                        return
-            except Exception:
-                pass
-
-            self.last_meas = meas_q
-            self.last_meas_gripper = meas_gripper
-            self.last_meas_t = tval
-
-            if hasattr(self, "simulation_thread") and self.simulation_thread is not None:
-                try:
-                    t_num = float(tval) if tval is not None else 0.0
-                except Exception:
-                    t_num = 0.0
-                
-                self.simulation_thread.ingest_meas_sig.emit(
-                    self.last_meas,         # q
-                    self.last_meas_gripper, # gripper
-                    t_num                   # t
-                )
-
-            self.update_status(f"RX meas (q): {self.last_meas}")
-            return
-
-        # fallback
-        self.update_status(f"RX json: {obj}")
-
-    """
-    =================================================================================================================
                                                 Fechar a Aplicação
     =================================================================================================================
     """
@@ -1351,7 +1293,10 @@ class RobotControlInterface(QMainWindow):
             if self.simulation_thread.isRunning():
                 self.simulation_thread.stop()
                 self.simulation_thread.wait(2000)
+            
+            self.comm_manager.stop_server()
             event.accept()
+        
         except Exception as e:
             print(f"Erro ao fechar aplicação: {e}")
             event.accept()

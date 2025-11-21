@@ -8,21 +8,21 @@
     - A Simulação é iniciada através da função .start() chamada na MainWindow -> ativa .run()
     - Envia Sinais para a MainWindow, que atualiza a interface em tempo real
         - Exemplo de sinais: (atualizar posição, status, progresso)
+    - Usa CommunicationManager para se comunicar com a ESP32
 
 Campos deste código:
 ["Setup Inicial"]:      Inicialização, Definição dos Sinais
 ["Configuração"]:       Ajuste da Trajetória desejada, Velocidade de Simulação e Uso de Controlador
 ["Simulação"]:          Início e Fim da Simulação
 """
-from PyQt6.QtCore import QThread, pyqtSignal, pyqtSlot, QEventLoop, QTimer
+from PyQt6.QtCore import QThread, pyqtSignal
 import numpy as np
-from time import perf_counter
-import random
 import traceback
+from typing import Optional
 
 
 class SimulationThread(QThread):
-    """Thread para simulação"""
+    """Thread para simulação com comunicação ESP32"""
     
     """
     =================================================================================================================
@@ -31,46 +31,27 @@ class SimulationThread(QThread):
     """
 
     """--------------------------- Sinais de Atualização (update) ---------------------------"""
-    # Esses sinais vão para a MainWindow (thread principal), onde ativam funções para atualizar a interface
+    # Sinais para a MainWindow (thread principal) atualizar interface
     position_updated = pyqtSignal(float, list, list, list, list, list, list, list)
     status_updated = pyqtSignal(str)
     progress_updated = pyqtSignal(int)
 
-    # === Sinais de integração com a comunicação ===
-    tx_json = pyqtSignal(dict)
-    
-    # (Recebe: Posição real, Posição real da garra, Tempo)
-    ingest_meas_sig = pyqtSignal(list, int, float)
-
-
-    
     """--------------------------- __init__() ---------------------------"""
     def __init__(self):
         super().__init__()
+        
+        # Configuração da simulação
         self.trajectory = []
         self.is_running = False
         self.is_paused = False
         self.speed_factor = 1.0
         self.controller = None
-
-        self.last_meas = None     
-        self.last_meas_t = 0.0
-
-        # Guarda o valor do slider (enviado para a ESP)
-        self.current_gripper_value = 0 
-        # Guarda o valor real da garra (recebido da ESP)
-        self.last_gripper_real = 0 
-
-        self.ingest_meas_sig.connect(self.ingest_meas)
-
-        # Adicionar o dado do gripper para receber e envia-lo durante a simulação
-        self.next_gripper_command = 0
-
-        self._rx_seq = 0
-        self.sync_timeout_s = 2.0
-        self.sync_tol = 1e-3
-
-
+        
+        # Gerenciador de comunicação (será injetado externamente)
+        self.comm_manager = None
+        
+        # Estado da garra
+        self.current_gripper_value = 0
     
     """
     =================================================================================================================
@@ -78,63 +59,30 @@ class SimulationThread(QThread):
     =================================================================================================================
     """
 
-    # <<< MODIFICADO: Slot atualizado para aceitar q, qd, qdd e i
-    @pyqtSlot(list, int, float)
-    def ingest_meas(self, meas_q, meas_gripper, t):
-        """Recebe os dados medidos da MainWindow."""
-        self.last_meas = meas_q
-        self.last_gripper_real = meas_gripper
-        self.last_meas_t = t
-        self._rx_seq += 1
-
-    def set_current_gripper_value(self, value: int):
-        """
-        Slot chamado pela main_window para atualizar o 
-        valor desejado da garra.
-        """
-        self.current_gripper_value = value
-    
-    
-    def _wait_for_new_meas(self, prev_seq, timeout_ms=100):
-        # verifica se chegou algun dado novo
-        if self._rx_seq > prev_seq:
-            return True
-
-        loop = QEventLoop()
-        hit = {"ok": False}
-
-        def _on_new(_meas_q, _meas_gripper, _t):
-            hit["ok"] = True
-            loop.quit()
-
-        # ouvir a próxima medição
-        self.ingest_meas_sig.connect(_on_new)
-        timer = QTimer()
-        timer.setSingleShot(True)
-        timer.timeout.connect(loop.quit)
-        timer.start(timeout_ms)
-
-        loop.exec()
-
-        try:
-            self.ingest_meas_sig.disconnect(_on_new)
-        except TypeError:
-            pass
-
-        return hit["ok"]
-
-
     """--------------------------- Configura a Trajetória desejada ---------------------------"""
     def set_trajectory(self, trajectory):
+        """Define a trajetória para simulação"""
         self.trajectory = trajectory
     
     """--------------------------- Configura a Velocidade de simulação ---------------------------"""
     def set_speed(self, speed):
+        """Define velocidade de simulação"""
         self.speed_factor = max(0.1, speed)  # Evitar velocidade zero
     
     """--------------------------- Configura o uso de Controlador ---------------------------"""
     def set_controller(self, controller):
+        """Define o controlador a ser usado"""
         self.controller = controller
+    
+    """--------------------------- Configura o CommunicationManager ---------------------------"""
+    def set_communication_manager(self, comm_manager):
+        """Injeta o gerenciador de comunicação"""
+        self.comm_manager = comm_manager
+    
+    """--------------------------- Atualiza valor da garra ---------------------------"""
+    def set_current_gripper_value(self, value: int):
+        """Atualiza o valor desejado da garra (recebe em graus)"""
+        self.current_gripper_value = value
     
     """
     =================================================================================================================
@@ -144,117 +92,133 @@ class SimulationThread(QThread):
 
     """--------------------------- Início da Simulação ---------------------------"""
     def run(self):
-        """Executar simulação (Lógica V6: Pedir -> Esperar -> Calcular -> Enviar)"""
+        """
+        Executar simulação
+        
+        Ciclo: Pedir medição → Aguardar → Calcular controle → Enviar comando
+        """
         try:
             self.is_running = True
             self.status_updated.emit("Simulação iniciada")
             total_points = len(self.trajectory)
 
+            # Verifica se há comunicação
+            if self.comm_manager is None or not self.comm_manager.is_connected():
+                raise RuntimeError("ESP32 não conectada. Inicie o servidor primeiro.")
+
+            # Configura controlador
             if self.controller:
                 self.controller.set_trajectory(self.trajectory)
 
-            # ===== SYNC COM A ESP32 (garantir que a 1ª medição = q0) =====
+            # ===== SINCRONIZAÇÃO INICIAL =====
             try:
                 q0 = list(np.asarray(self.trajectory[0][1], dtype=float).reshape(3))
             except Exception:
                 q0 = [0.0, 0.0, 0.0]
 
-            self.status_updated.emit("Sincronizando com ESP…")
+            self.status_updated.emit("Sincronizando com ESP32...")
             
-            # Comando inicial de sync (envia q0 e a garra)
-            command_to_send = {
-                "cmd": "set_ref",
-                "q_cmd": q0, # Envia a posição inicial como comando
-                "gripper": self.current_gripper_value
-            }
-
-            t0 = perf_counter()
-            synced = False
-            while self.is_running and (perf_counter() - t0) < self.sync_timeout_s:
-                self.tx_json.emit(command_to_send) # Envia o comando de sync
-                self.tx_json.emit({"cmd": "get_meas"}) # Pede a medição
-                
-                # Espera 100ms por uma resposta
-                seq_before = self._rx_seq
-                if not self._wait_for_new_meas(seq_before, timeout_ms=100):
-                    continue # (Timeout, tenta o loop 'while' de novo)
-
-                # Resposta chegou! Checa o erro.
-                if self.last_meas is not None:
-                    try:
-                        err = np.linalg.norm(np.asarray(self.last_meas, dtype=float).reshape(3) - q0)
-                        if err < self.sync_tol:
-                            synced = True
-                            break # Sincronizado! Sai do loop 'while'
-                    except Exception:
-                        pass
+            # Usa CommunicationManager para sincronizar
+            synced = self.comm_manager.synchronize_initial_position(q0, self.current_gripper_value)
             
             if not synced:
-                self.status_updated.emit("Aviso: sync não confirmou; seguindo mesmo assim.")
+                self.status_updated.emit("Aviso: sincronização não confirmada; prosseguindo")
             else:
-                self.status_updated.emit("ESP sincronizada.")
+                self.status_updated.emit("ESP32 sincronizada")
             
-            for i, trajectory in enumerate(self.trajectory):
+            # ===== LOOP PRINCIPAL =====
+            for i, trajectory_point in enumerate(self.trajectory):
+                # Verifica pausa
                 while self.is_paused and self.is_running:
                     self.msleep(50)
+                    
                 if not self.is_running:
                     break
 
-                t, q_traj, qd_traj, qdd_traj = trajectory
+                t, q_traj, qd_traj, qdd_traj = trajectory_point
 
-                # 1) PEDIR MEDIÇÃO (do passo anterior)
-                #    (O comando 'set_ref' já foi enviado no fim do loop anterior
-                #     ou no sync, agora só pedimos a medição)
-                self.tx_json.emit({"cmd": "get_meas"})
-
-                # 2) esperar medição
-                seq_before = self._rx_seq
-                self.tx_json.emit({"cmd": "get_meas"}) # Pede de novo por segurança
-
-                while self.is_running and not self._wait_for_new_meas(seq_before, timeout_ms=int(max(20, 100 / self.speed_factor))):
-                    self.status_updated.emit("Aguardando medição da ESP…")
-                    self.tx_json.emit({"cmd": "get_meas"})
+                # 1) SOLICITAR MEDIÇÃO
+                self.comm_manager.request_measurement()
                 
-                # 3) Entregar o dado para o controlador
-                if self.controller and self.last_meas is not None:
-                    try:
-                        self.controller.set_measurement(self.last_meas, t=None)
-                    except Exception as e:
-                        print(f"Erro ao chamar set_measurement: {e}")
-                        pass
-
-                # 4) Calculo do novo command
-                try:
-                    (
-                        q_command,  # O novo comando de posição
-                        q_real,     # A posição real usada
-                        qd_real,
-                        qdd_real,   
-                        e_pos, e_vel, e_acc, tau
-                    ) = self.controller.update_control_position()
+                # 2) AGUARDAR MEDIÇÃO
+                timeout_ms = int(max(20, 100 / self.speed_factor))                  # [!!!]
                 
-                except RuntimeError as ex:
-                    if str(ex) == "sem_medidoes":
-                        self.status_updated.emit("Medição ainda não disponível; aguardando…")
+                if not self.comm_manager.wait_for_measurement(timeout_ms):
+                    self.status_updated.emit("Aguardando medição da ESP32...")
+                    # Tenta novamente
+                    self.comm_manager.request_measurement()
+                    if not self.comm_manager.wait_for_measurement(timeout_ms):
+                        self.status_updated.emit("Timeout ao aguardar medição")
                         continue
-                    else:
-                        raise
-                #Só para testes
-                q_traj_deste_passo = list(np.asarray(q_traj, dtype=float).reshape(3))
-                # 5) Enviar o comando depois tem que trocar para o q_command
-                command_to_send = {"cmd": "set_ref", "q_cmd": list(q_traj_deste_passo), "gripper": self.current_gripper_value}
-                self.tx_json.emit(command_to_send)
-
-                # 6) Envia para UI
-                self.position_updated.emit(float(t), list(q_real), list(qd_real), list(qdd_real), list(e_pos), list(e_vel), list(e_acc), list(tau))
                 
-                # 7) Atualizar loop
+                # 3) OBTER MEDIÇÃO
+                measurement = self.comm_manager.get_last_measurement()
+                
+                if measurement is None or not measurement.is_valid():
+                    self.status_updated.emit("Medição inválida recebida")
+                    continue
+                
+                # 4) PROCESSAR CONTROLADOR
+                if self.controller:
+                    try:
+                        # Entrega medição ao controlador
+                        self.controller.set_measurement(measurement.q, t=measurement.timestamp)
+                        
+                        # Calcula controle
+                        (
+                            q_command,   # Comando de posição calculado
+                            q_real,      # Posição real medida
+                            qd_real,     # Velocidade calculada
+                            qdd_real,    # Aceleração calculada
+                            e_pos,       # Erro de posição
+                            e_vel,       # Erro de velocidade
+                            e_acc,       # Erro de aceleração
+                            tau          # Torque calculado
+                        ) = self.controller.update_control_position()
+                    
+                    except RuntimeError as ex:
+                        if str(ex) == "sem_medidoes":
+                            self.status_updated.emit("Aguardando primeira medição válida...")
+                            continue
+                        else:
+                            raise
+                else:
+                    # Sem controlador: usa trajetória direta
+                    q_command = q_traj
+                    q_real = measurement.q
+                    qd_real = [0.0, 0.0, 0.0]
+                    qdd_real = [0.0, 0.0, 0.0]
+                    e_pos = [0.0, 0.0, 0.0]
+                    e_vel = [0.0, 0.0, 0.0]
+                    e_acc = [0.0, 0.0, 0.0]
+                    tau = [0.0, 0.0, 0.0]
+                
+                # 5) ENVIAR COMANDO
+                # TODO: Trocar q_traj por q_command quando tudo estiver funcionando
+                q_to_send = list(np.asarray(q_traj, dtype=float).reshape(3))
+                self.comm_manager.send_reference(q_to_send, self.current_gripper_value)
+                
+                # 6) ATUALIZAR INTERFACE
+                self.position_updated.emit(
+                    float(t),
+                    list(q_real),
+                    list(qd_real),
+                    list(qdd_real),
+                    list(e_pos),
+                    list(e_vel),
+                    list(e_acc),
+                    list(tau)
+                )
+                
+                # 7) PROGRESSO
                 progress = int((i + 1) / total_points * 100)
                 self.progress_updated.emit(progress)
                 self.status_updated.emit(f"Simulando... {progress}% | t={t:.2f}s")
 
+                # Sleep para controlar velocidade da animação
                 self.msleep(max(10, int(100 / self.speed_factor)))
 
+            # Fim do loop
             if self.is_running:
                 self.status_updated.emit("Simulação concluída")
             else:
@@ -274,12 +238,12 @@ class SimulationThread(QThread):
         """Parar simulação"""
         self.is_running = False
 
-    """--------------------------- Em construção (!!!!) ---------------------------"""
+    """--------------------------- Pausar Simulação ---------------------------"""
     def pause(self):
-        """Pausar a Simulação"""
+        """Pausar a simulação"""
         self.is_paused = True
     
-    """--------------------------- Em construção (!!!!) ---------------------------"""
+    """--------------------------- Retomar Simulação ---------------------------"""
     def resume(self):
-        """Pausar a Simulação"""
+        """Retomar a simulação"""
         self.is_paused = False

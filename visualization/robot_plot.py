@@ -660,8 +660,6 @@ class RobotPlot(QWidget):
     """--------------------------- Update da Posição Temporal ---------------------------"""
     def update_time_evolution(self, t, q, qd, qdd, e, ed, edd, tau):
         """Atualizar gráfico de posição com novos dados"""
-        if self.active_tab != 0:
-            return
         try:
             # Adicionar novos pontos
             self.time_data.append(t)
@@ -718,9 +716,12 @@ class RobotPlot(QWidget):
                     ax.set_ylim(*get_yrange(*data, margin=margin))
 
             # Redesenhar
-            self.canvas_time_evolution.draw_idle()
-            self.canvas_errors.draw_idle()
-            self.canvas_forces.draw_idle()
+            if self.active_tab == 1:
+                self.canvas_time_evolution.draw_idle()
+            elif self.active_tab == 2:
+                self.canvas_errors.draw_idle()
+            elif self.active_tab == 3:
+                self.canvas_forces.draw_idle()
             
         except Exception as e:
             print(f"Erro ao atualizar gráfico de evolução temporal: {e}")
