@@ -1,0 +1,24 @@
+# CocoaBot - Dependências do Projeto
+# Robotics Simulation System for 3-DOF RRP Robot
+
+# === Interface Gráfica ===
+PyQt6>=6.4.0
+
+# === Visualização e Plots ===
+matplotlib>=3.7.0
+
+# === Computação Científica ===
+numpy>=1.24.0
+sympy>=1.12
+
+# === Testes (desenvolvimento) ===
+pytest>=7.4.0
+pytest-qt>=4.2.0
+pytest-mock>=3.11.0
+pytest-cov>=4.1.0
+
+# === Ferramentas de Desenvolvimento ===
+# Descomente se quiser usar:
+# black>=23.0.0          # Formatação de código
+# flake8>=6.0.0          # Linting
+# mypy>=1.5.0            # Type checking
