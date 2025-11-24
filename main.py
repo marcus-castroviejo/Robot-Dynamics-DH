@@ -65,7 +65,9 @@ def main():
 
         # --- Servidor TCP no PC para a ESP32 se conectar ---
 
-        # SERVER_PORT = 9000  # escolha a porta (ex.: 9000)
+        SERVER_PORT = 9000  # escolha a porta (ex.: 9000)
+
+        window.start_esp32_server(port=SERVER_PORT)
 
         # def after_client_connected():
         #     window.update_status("ESP32 conectada; iniciando testes…")

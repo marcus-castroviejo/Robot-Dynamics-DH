@@ -1294,7 +1294,8 @@ class RobotControlInterface(QMainWindow):
                 self.simulation_thread.stop()
                 self.simulation_thread.wait(2000)
             
-            self.comm_manager.stop_server()
+            # self.comm_manager.stop_server()
+            self.stop_esp32_server()
             event.accept()
         
         except Exception as e:
