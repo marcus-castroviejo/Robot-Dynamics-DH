@@ -65,18 +65,18 @@ def main():
 
         # --- Servidor TCP no PC para a ESP32 se conectar ---
 
-        SERVER_PORT = 9000  # escolha a porta (ex.: 9000)
+        # SERVER_PORT = 9000  # escolha a porta (ex.: 9000)
 
-        def after_client_connected():
-            window.update_status("ESP32 conectada; iniciando testes…")
-            # 1) ping -> espera {"pong":true}
-            window.send_esp32_json({"cmd": "ping"})
+        # def after_client_connected():
+        #     window.update_status("ESP32 conectada; iniciando testes…")
+        #     # 1) ping -> espera {"pong":true}
+        #     window.send_esp32_json({"cmd": "ping"})
 
-        # quando a ESP32 conectar, disparamos os testes
-        window.srv.client_connected.connect(lambda ip, port: after_client_connected())
+        # # quando a ESP32 conectar, disparamos os testes
+        # window.comm_manager.client_connected.connect(lambda ip, port: after_client_connected())
 
-        # inicia o servidor depois que a UI carrega
-        QTimer.singleShot(300, lambda: window.start_esp32_server(SERVER_PORT))
+        # # inicia o servidor depois que a UI carrega
+        # QTimer.singleShot(300, lambda: window.start_esp32_server(SERVER_PORT))
         
         # Mensagem de inicialização
         window.update_status("Interface iniciada com sucesso")
