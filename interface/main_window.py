@@ -55,6 +55,14 @@ class RobotControlInterface(QMainWindow):
         self.setup_responsive_window()
         
         # Estilo para os botões
+        self.button_style = """
+            QPushButton {
+                padding: 4px 8px;
+                font-size: 11px;
+                min-height: 20px;
+                max-height: 25px;
+            }
+        """
         self.error_style = """
         QLineEdit {
             border: 2px solid #dc3545;
@@ -79,8 +87,6 @@ class RobotControlInterface(QMainWindow):
         self.update_trajectory_params()
         self.update_coordinate_system()
         self.update_controller("Torque Calculado")
-
-        
 
     """--------------------------- Inicialização dos Componentes ---------------------------"""
     def init_components(self):
@@ -351,25 +357,10 @@ class RobotControlInterface(QMainWindow):
         layout.addWidget(self.duration_field, 1, 0)
         layout.addWidget(self.dt_field, 1, 1)
 
-        # Adiciona os Botões
-        button_style = """
-            QPushButton {
-                padding: 4px 8px;
-                font-size: 11px;
-                min-height: 20px;
-                max-height: 25px;
-            }
-        """
-
         # Botão: calcular trajetória
         self.btn_calc_trajectory = QPushButton("Calcular Trajetória")
-        self.btn_calc_trajectory.setStyleSheet(button_style)
+        self.btn_calc_trajectory.setStyleSheet(self.button_style)
         layout.addWidget(self.btn_calc_trajectory, 2, 0, 1, 2)
-        
-        # Botão: Enviar para o robô
-        # self.btn_send_to_robot = QPushButton("Enviar para o Robô")
-        # self.btn_send_to_robot.setStyleSheet(button_style)
-        # layout.addWidget(self.btn_send_to_robot, 3, 0, 1, 2)
 
         return group
 
@@ -424,6 +415,12 @@ class RobotControlInterface(QMainWindow):
         layout.addWidget(self.Kd_field, 2, 1)
         layout.addWidget(self.Ki_field, 2, 2)
         layout.addWidget(self.Kt_field, 2, 3)
+
+        # Conectar com a ESP32
+        # Adotar o estilo do botão
+        self.btn_connect_robot = QPushButton("Conectar ESP32")
+        self.btn_connect_robot.setStyleSheet(self.button_style)
+        layout.addWidget(self.btn_connect_robot, 3, 0, 1, 4)
         
         return group
 
@@ -457,26 +454,15 @@ class RobotControlInterface(QMainWindow):
         layout.addWidget(self.progress_bar)
         
         # Botões                                                # (Linhas 3-6): Botões ("trajetória", "simular", "parar", "robô")
-        self.btn_connect_robot = QPushButton("Conectar ESP32")
         self.btn_simulate = QPushButton("Simular")
         self.btn_stop = QPushButton("Pausar")
         # Adotar o estilo do botão
-        button_style = """
-            QPushButton {
-                padding: 4px 8px;
-                font-size: 11px;
-                min-height: 20px;
-                max-height: 25px;
-            }
-        """
-        self.btn_connect_robot.setStyleSheet(button_style)
-        self.btn_simulate.setStyleSheet(button_style)
-        self.btn_stop.setStyleSheet(button_style)
+        self.btn_simulate.setStyleSheet(self.button_style)
+        self.btn_stop.setStyleSheet(self.button_style)
         # Alguns botões são desabilitados inicialmente
         self.btn_stop.setEnabled(False)
         self.btn_simulate.setEnabled(False)
         # Adiciona os Widgets
-        layout.addWidget(self.btn_connect_robot)
         layout.addWidget(self.btn_simulate)
         layout.addWidget(self.btn_stop)
         
@@ -1108,6 +1094,7 @@ class RobotControlInterface(QMainWindow):
         """Verifica se o controlador será utilizado"""
         # Opções: 'Torque Calculado', 'PID', 'PID (Baixo Nível)', 'Simulação'
         try:
+            self.update_status(f'Controlador: {controller}')
             self.controller = Controller(self.robot)
             self.controller.set_controller(controller)
             self.update_gains()
@@ -1348,7 +1335,6 @@ class RobotControlInterface(QMainWindow):
                 self.simulation_thread.stop()
                 self.simulation_thread.wait(2000)
             
-            # self.comm_manager.stop_server()
             self.stop_esp32_server()
             event.accept()
         
