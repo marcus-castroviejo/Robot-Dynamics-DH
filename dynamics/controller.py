@@ -191,11 +191,11 @@ class Controller:
             # 7) Controle PID (Baixo Nivel) - Implementação na ESP32
             q_command = q_real.copy()
             tau = (0, 0, 0)
-        elif self.contoller == 'PID':
+        elif self.controller == 'PID':
             # 7) Controle PID
             q_command = q_traj + self.Kp @ e_pos + self.Kd @ e_vel + self.Ki @ self.e_int
             tau = (0, 0, 0)
-        elif self.contoller == 'Torque Calculado':
+        elif self.controller == 'Torque Calculado':
             # 7) Dinâmica no estado medido (q_real, qd_real, qdd_real)
             M, C, G = self.robot.calculate_dynamics(list(q_real), list(qd_real), list(qdd_real))
             M = np.array(M, dtype=np.float64)

@@ -103,12 +103,8 @@ class SimulationThread(QThread):
             total_points = len(self.trajectory)
 
             if self.controller.controller not in ('Torque Calculado', 'PID', 'PID (Baixo Nível)', 'Simulação'):
-                self.status_updated.emit(f"Erro na simulação: Controlador não definido")
+                self.status_updated.emit(f"Erro na simulação: Controlador não definido ({self.controller.controller})")
                 return
-            
-            # if self.controller.controller == 'Simulação':
-            #     self.run_simulation()
-            #     return
 
             if self.controller.controller != 'Simulação':
                 # Verifica se há comunicação
@@ -241,67 +237,6 @@ class SimulationThread(QThread):
         finally:
             self.is_running = False
             self.is_paused = False
-
-    """--------------------------- Modo Simulação ---------------------------"""
-    # def run_simulation(self):
-    #     try:
-    #         total_points = len(self.trajectory)
-    #         # ===== LOOP PRINCIPAL =====
-    #         for i, trajectory_point in enumerate(self.trajectory):
-    #             # Verifica pausa
-    #             while self.is_paused and self.is_running:
-    #                 self.msleep(50)
-                    
-    #             if not self.is_running:
-    #                 break
-
-    #             t, q_traj, qd_traj, qdd_traj = trajectory_point
-                
-    #             # 4) PROCESSAR CONTROLADOR
-    #             # Sem controlador: usa trajetória direta
-    #             q_command = None
-    #             q_real = q_traj.copy()
-    #             qd_real = qd_traj.copy()
-    #             qdd_real = qdd_traj.copy()
-    #             e_pos = [0.0, 0.0, 0.0]
-    #             e_vel = [0.0, 0.0, 0.0]
-    #             e_acc = [0.0, 0.0, 0.0]
-    #             tau = [0.0, 0.0, 0.0]
-                
-    #             # 6) ATUALIZAR INTERFACE
-    #             self.position_updated.emit(
-    #                 float(t),
-    #                 list(q_real),
-    #                 list(qd_real),
-    #                 list(qdd_real),
-    #                 list(e_pos),
-    #                 list(e_vel),
-    #                 list(e_acc),
-    #                 list(tau)
-    #             )
-                
-    #             # 7) PROGRESSO
-    #             progress = int((i + 1) / total_points * 100)
-    #             self.progress_updated.emit(progress)
-    #             self.status_updated.emit(f"Simulando... {progress}% | t={t:.2f}s")
-
-    #             # Sleep para controlar velocidade da animação
-    #             self.msleep(max(10, int(100 / self.speed_factor)))
-
-    #         # Fim do loop
-    #         if self.is_running:
-    #             self.status_updated.emit("Simulação concluída")
-    #         else:
-    #             self.status_updated.emit("Simulação interrompida")
-                
-    #     except Exception as e:
-    #         print("--- TRACEBACK COMPLETO DO ERRO ---")
-    #         traceback.print_exc()
-    #         print("----------------------------------")
-    #         self.status_updated.emit(f"Erro na simulação: {str(e)}")
-    #     finally:
-    #         self.is_running = False
-    #         self.is_paused = False
 
     """--------------------------- Fim da Simulação ---------------------------"""
     def stop(self):

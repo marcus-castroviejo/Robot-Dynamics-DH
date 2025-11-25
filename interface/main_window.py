@@ -1038,11 +1038,15 @@ class RobotControlInterface(QMainWindow):
         """Inicia servidor de comunicação"""
         if not self.comm_manager.start_server(port):
             QMessageBox.warning(self, "Erro", "Falha ao iniciar servidor de comunicação")
+        self.btn_connect_robot.setText("Aguardando ESP32...")
+        self.update_status(f"Servidor ativo na porta {port}. Aguardando ESP32...")
     
     """--------------------------- 1.7) Funções de Controle -> Parar Servidor ESP 32 ---------------------------"""
     def stop_esp32_server(self):
         """Para servidor de comunicação"""
         self.comm_manager.stop_server()
+        self.btn_connect_robot.setText("Conectar ESP32")
+        self.update_status("Servidor desligado")
 
     """--------------------------- 1.8) Funções de Controle -> Log de conexão ESP 32 ---------------------------"""
     def _on_connection_changed(self, connected: bool):
@@ -1051,8 +1055,15 @@ class RobotControlInterface(QMainWindow):
             self.update_status("ESP32 conectada")
             self.btn_connect_robot.setText("Desconectar ESP32")
         else:
-            self.update_status("ESP32 desconectada")
-            self.btn_connect_robot.setText("Conectar ESP32")
+            # self.update_status("ESP32 desconectada")
+            # self.btn_connect_robot.setText("Conectar ESP32")
+            # ESP32 desconectou mas servidor ainda ativo
+            if self.comm_manager._server.is_listening():
+                self.update_status("ESP32 desconectada. Servidor ativo.")
+                self.btn_connect_robot.setText("Aguardando ESP32...")
+            else:
+                self.update_status("Servidor desligado")
+                self.btn_connect_robot.setText("Conectar ESP32")
     
     """--------------------------- 1.9) Funções de Controle -> Log de recebimento de dados ---------------------------"""
     def _on_measurement_received(self, measurement):
@@ -1067,10 +1078,10 @@ class RobotControlInterface(QMainWindow):
 
     """--------------------------- 2.0) Funções de Controle -> Conectar ESP32 ---------------------------"""
     def connect_robot(self):
-        connection = self.btn_connect_robot.text()
-        if connection == 'Conectar ESP32':
+        btn_text = self.btn_connect_robot.text()
+        if btn_text == 'Conectar ESP32':
             self.start_esp32_server(port=self.SERVER_PORT)
-        elif connection == 'Desconectar ESP32':
+        elif btn_text in ['Aguardando ESP32...', 'Desconectar ESP32', 'Desconectar Servidor']:
             self.stop_esp32_server()
 
     """
