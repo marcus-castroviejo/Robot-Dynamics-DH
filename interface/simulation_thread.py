@@ -102,29 +102,38 @@ class SimulationThread(QThread):
             self.status_updated.emit("Simulação iniciada")
             total_points = len(self.trajectory)
 
-            # Verifica se há comunicação
-            if self.comm_manager is None or not self.comm_manager.is_connected():
-                raise RuntimeError("ESP32 não conectada. Inicie o servidor primeiro.")
-
-            # Configura controlador
-            if self.controller:
-                self.controller.set_trajectory(self.trajectory)
-
-            # ===== SINCRONIZAÇÃO INICIAL =====
-            try:
-                q0 = list(np.asarray(self.trajectory[0][1], dtype=float).reshape(3))
-            except Exception:
-                q0 = [0.0, 0.0, 0.0]
-
-            self.status_updated.emit("Sincronizando com ESP32...")
+            if self.controller.controller not in ('Torque Calculado', 'PID', 'PID (Baixo Nível)', 'Simulação'):
+                self.status_updated.emit(f"Erro na simulação: Controlador não definido")
+                return
             
-            # Usa CommunicationManager para sincronizar
-            synced = self.comm_manager.synchronize_initial_position(q0, self.current_gripper_value)
-            
-            if not synced:
-                self.status_updated.emit("Aviso: sincronização não confirmada; prosseguindo")
-            else:
-                self.status_updated.emit("ESP32 sincronizada")
+            # if self.controller.controller == 'Simulação':
+            #     self.run_simulation()
+            #     return
+
+            if self.controller.controller != 'Simulação':
+                # Verifica se há comunicação
+                if self.comm_manager is None or not self.comm_manager.is_connected():
+                    raise RuntimeError("ESP32 não conectada. Inicie o servidor primeiro.")
+
+                # Configura controlador
+                if self.controller:
+                    self.controller.set_trajectory(self.trajectory)
+
+                # ===== SINCRONIZAÇÃO INICIAL =====
+                try:
+                    q0 = list(np.asarray(self.trajectory[0][1], dtype=float).reshape(3))
+                except Exception:
+                    q0 = [0.0, 0.0, 0.0]
+
+                self.status_updated.emit("Sincronizando com ESP32...")
+                
+                # Usa CommunicationManager para sincronizar
+                synced = self.comm_manager.synchronize_initial_position(q0, self.current_gripper_value)
+                
+                if not synced:
+                    self.status_updated.emit("Aviso: sincronização não confirmada; prosseguindo")
+                else:
+                    self.status_updated.emit("ESP32 sincronizada")
             
             # ===== LOOP PRINCIPAL =====
             for i, trajectory_point in enumerate(self.trajectory):
@@ -137,29 +146,39 @@ class SimulationThread(QThread):
 
                 t, q_traj, qd_traj, qdd_traj = trajectory_point
 
-                # 1) SOLICITAR MEDIÇÃO
-                self.comm_manager.request_measurement()
-                
-                # 2) AGUARDAR MEDIÇÃO
-                timeout_ms = int(max(20, 100 / self.speed_factor))                  # [!!!]
-                
-                if not self.comm_manager.wait_for_measurement(timeout_ms):
-                    self.status_updated.emit("Aguardando medição da ESP32...")
-                    # Tenta novamente
+                if self.controller.controller == 'Simulação':
+                    # Sem controlador: usa trajetória direta
+                    q_command = None
+                    q_real = q_traj.copy()
+                    qd_real = qd_traj.copy()
+                    qdd_real = qdd_traj.copy()
+                    e_pos = [0.0, 0.0, 0.0]
+                    e_vel = [0.0, 0.0, 0.0]
+                    e_acc = [0.0, 0.0, 0.0]
+                    tau = [0.0, 0.0, 0.0]
+                else:
+                    # 1) SOLICITAR MEDIÇÃO
                     self.comm_manager.request_measurement()
+                    
+                    # 2) AGUARDAR MEDIÇÃO
+                    timeout_ms = int(max(20, 100 / self.speed_factor))                  # [!!!]
+                    
                     if not self.comm_manager.wait_for_measurement(timeout_ms):
-                        self.status_updated.emit("Timeout ao aguardar medição")
+                        self.status_updated.emit("Aguardando medição da ESP32...")
+                        # Tenta novamente
+                        self.comm_manager.request_measurement()
+                        if not self.comm_manager.wait_for_measurement(timeout_ms):
+                            self.status_updated.emit("Timeout ao aguardar medição")
+                            continue
+                    
+                    # 3) OBTER MEDIÇÃO
+                    measurement = self.comm_manager.get_last_measurement()
+                    
+                    if measurement is None or not measurement.is_valid():
+                        self.status_updated.emit("Medição inválida recebida")
                         continue
-                
-                # 3) OBTER MEDIÇÃO
-                measurement = self.comm_manager.get_last_measurement()
-                
-                if measurement is None or not measurement.is_valid():
-                    self.status_updated.emit("Medição inválida recebida")
-                    continue
-                
-                # 4) PROCESSAR CONTROLADOR
-                if self.controller:
+                    
+                    # 4) PROCESSAR CONTROLADOR
                     try:
                         # Entrega medição ao controlador
                         self.controller.set_measurement(measurement.q, t=measurement.timestamp)
@@ -182,21 +201,11 @@ class SimulationThread(QThread):
                             continue
                         else:
                             raise
-                else:
-                    # Sem controlador: usa trajetória direta
-                    q_command = q_traj
-                    q_real = measurement.q
-                    qd_real = [0.0, 0.0, 0.0]
-                    qdd_real = [0.0, 0.0, 0.0]
-                    e_pos = [0.0, 0.0, 0.0]
-                    e_vel = [0.0, 0.0, 0.0]
-                    e_acc = [0.0, 0.0, 0.0]
-                    tau = [0.0, 0.0, 0.0]
                 
-                # 5) ENVIAR COMANDO
-                # TODO: Trocar q_traj por q_command quando tudo estiver funcionando
-                q_to_send = list(np.asarray(q_traj, dtype=float).reshape(3))
-                self.comm_manager.send_reference(q_to_send, self.current_gripper_value)
+                    # 5) ENVIAR COMANDO
+                    # TODO: Trocar q_traj por q_command quando tudo estiver funcionando
+                    q_to_send = list(np.asarray(q_traj, dtype=float).reshape(3))
+                    self.comm_manager.send_reference(q_to_send, self.current_gripper_value)
                 
                 # 6) ATUALIZAR INTERFACE
                 self.position_updated.emit(
@@ -232,6 +241,67 @@ class SimulationThread(QThread):
         finally:
             self.is_running = False
             self.is_paused = False
+
+    """--------------------------- Modo Simulação ---------------------------"""
+    # def run_simulation(self):
+    #     try:
+    #         total_points = len(self.trajectory)
+    #         # ===== LOOP PRINCIPAL =====
+    #         for i, trajectory_point in enumerate(self.trajectory):
+    #             # Verifica pausa
+    #             while self.is_paused and self.is_running:
+    #                 self.msleep(50)
+                    
+    #             if not self.is_running:
+    #                 break
+
+    #             t, q_traj, qd_traj, qdd_traj = trajectory_point
+                
+    #             # 4) PROCESSAR CONTROLADOR
+    #             # Sem controlador: usa trajetória direta
+    #             q_command = None
+    #             q_real = q_traj.copy()
+    #             qd_real = qd_traj.copy()
+    #             qdd_real = qdd_traj.copy()
+    #             e_pos = [0.0, 0.0, 0.0]
+    #             e_vel = [0.0, 0.0, 0.0]
+    #             e_acc = [0.0, 0.0, 0.0]
+    #             tau = [0.0, 0.0, 0.0]
+                
+    #             # 6) ATUALIZAR INTERFACE
+    #             self.position_updated.emit(
+    #                 float(t),
+    #                 list(q_real),
+    #                 list(qd_real),
+    #                 list(qdd_real),
+    #                 list(e_pos),
+    #                 list(e_vel),
+    #                 list(e_acc),
+    #                 list(tau)
+    #             )
+                
+    #             # 7) PROGRESSO
+    #             progress = int((i + 1) / total_points * 100)
+    #             self.progress_updated.emit(progress)
+    #             self.status_updated.emit(f"Simulando... {progress}% | t={t:.2f}s")
+
+    #             # Sleep para controlar velocidade da animação
+    #             self.msleep(max(10, int(100 / self.speed_factor)))
+
+    #         # Fim do loop
+    #         if self.is_running:
+    #             self.status_updated.emit("Simulação concluída")
+    #         else:
+    #             self.status_updated.emit("Simulação interrompida")
+                
+    #     except Exception as e:
+    #         print("--- TRACEBACK COMPLETO DO ERRO ---")
+    #         traceback.print_exc()
+    #         print("----------------------------------")
+    #         self.status_updated.emit(f"Erro na simulação: {str(e)}")
+    #     finally:
+    #         self.is_running = False
+    #         self.is_paused = False
 
     """--------------------------- Fim da Simulação ---------------------------"""
     def stop(self):

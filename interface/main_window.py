@@ -27,11 +27,11 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QHBoxLayout, QGridLayout, QLabel, QLineEdit, 
                             QPushButton, QGroupBox, QSlider, QTextEdit,
                             QFrame, QCheckBox, QMessageBox, QProgressBar, 
-                            QSplitter, QRadioButton, QTabWidget)
+                            QSplitter, QRadioButton, QTabWidget, QComboBox)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QDoubleValidator
 from PyQt6.QtCore import QLocale, QSignalBlocker
-from dynamics import CocoaBot, CalculatedTorqueController
+from dynamics import CocoaBot, Controller
 from trajectory import TrajectoryGenerator
 from visualization import RobotPlot
 from interface import SimulationThread
@@ -72,11 +72,15 @@ class RobotControlInterface(QMainWindow):
         self.default_q1 = np.deg2rad(0.0)
         self.default_q2 = np.deg2rad(80.0)
         self.default_d3 = 0.03
+        self.SERVER_PORT = 9000
         
-        # Coloar o robô na posição de início
+        # Colocar o robô na posição de início
         self.robot_plot.update_robot_position(self.default_q1, self.default_q2, self.default_d3)    # self.initial_t, 
         self.update_trajectory_params()
-        self.update_coordenate_system()
+        self.update_coordinate_system()
+        self.update_controller("Torque Calculado")
+
+        
 
     """--------------------------- Inicialização dos Componentes ---------------------------"""
     def init_components(self):
@@ -90,7 +94,7 @@ class RobotControlInterface(QMainWindow):
 
             # Gerenciador de comunicação (substitui ESP32Server)
             self.comm_manager = CommunicationManager(self)
-            self._setup_communication_signals()
+            # self._setup_communication_signals()
             
             # IMPORTANTE: Injeta o comm_manager na thread
             self.simulation_thread.set_communication_manager(self.comm_manager)
@@ -102,17 +106,17 @@ class RobotControlInterface(QMainWindow):
             QMessageBox.critical(self, "Erro", f"Erro ao inicializar componentes: {str(e)}")
     
     """--------------------------- Configura Sinais de Conexão ---------------------------"""
-    def _setup_communication_signals(self):
-        """Conecta sinais do CommunicationManager"""
-        # Status e erros
-        self.comm_manager.status_message.connect(self.update_status)
-        self.comm_manager.error_occurred.connect(lambda msg: self.update_status(f"Erro ESP32: {msg}"))
+    # def _setup_communication_signals(self):
+    #     """Conecta sinais do CommunicationManager"""
+    #     # Status e erros
+    #     self.comm_manager.status_message.connect(self.update_status)
+    #     self.comm_manager.error_occurred.connect(lambda msg: self.update_status(f"Erro ESP32: {msg}"))
         
-        # Conexão
-        self.comm_manager.connection_changed.connect(self._on_connection_changed)
+    #     # Conexão
+    #     self.comm_manager.connection_changed.connect(self._on_connection_changed)
         
-        # Medições (apenas para log, se necessário)
-        self.comm_manager.measurement_received.connect(self._on_measurement_received)
+    #     # Medições (apenas para log, se necessário)
+    #     self.comm_manager.measurement_received.connect(self._on_measurement_received)
 
     """--------------------------- Ajustar o tamanho da Interface ---------------------------"""
     def setup_responsive_window(self):
@@ -181,7 +185,7 @@ class RobotControlInterface(QMainWindow):
         
         # Adicionando os Campos
         layout.addWidget(self.create_positions_group())     # (Linha 1): Campo de Posição
-        layout.addWidget(self.create_endEffector_group())
+        layout.addWidget(self.create_gripper_group())
         layout.addWidget(self.create_trajectory_group())    # (Linha 2): Campo de trajetória
         layout.addWidget(self.create_control_group())
         layout.addWidget(self.create_simulation_group())    # (Linha 3): Campo de Simulação
@@ -205,17 +209,17 @@ class RobotControlInterface(QMainWindow):
         double_validator.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
 
         # Campos de entrada: Sistema de Coordenadas
-        self.radio_joint = QRadioButton("Juntas")
-        self.radio_cartesian = QRadioButton("Cartesiano")
-        self.radio_joint.setChecked(True)
+        self.coordinate = QComboBox()
+        self.coordinate.addItems(["Juntas", "Cartesiano"])
+        self.coordinate_mode = "Juntas"
 
         # Campos de entrada: q_0 e q_f | pos_0 e pos_f
         self.initial_q1 = QLineEdit("0")                    # [entrada] q_0[1]
         self.initial_q2 = QLineEdit("80")                   # [entrada] q_0[2]
-        self.initial_d3 = QLineEdit("3.0")                  # [entrada] q_0[3]
+        self.initial_d3 = QLineEdit("3")                  # [entrada] q_0[3]
         self.final_q1 = QLineEdit("90")                     # [entrada] q_f[1]
         self.final_q2 = QLineEdit("135")                    # [entrada] q_f[2]
-        self.final_d3 = QLineEdit("8.0")                    # [entrada] q_f[3]
+        self.final_d3 = QLineEdit("8")                    # [entrada] q_f[3]
         # Validador
         self.initial_q1.setValidator(double_validator)
         self.initial_q2.setValidator(double_validator)
@@ -235,38 +239,58 @@ class RobotControlInterface(QMainWindow):
         OBS - Posicionamento: .addWidget("campo", linha, coluna)
         """
         # Sistema de Coordenadas
-        sistcoord_label = QLabel("Coordenadas:")            # (Linha 0): "Coordenadas" | "Juntas" | "Cartesiano"
-        layout.addWidget(sistcoord_label, 0, 0)
-        layout.addWidget(self.radio_joint, 0, 1)
-        layout.addWidget(self.radio_cartesian, 0, 2)
+        sistcoord_label = QLabel("Modo:")            # (Linha 0): "Coordenadas" | "Juntas" | "Cartesiano"
+        layout.addWidget(sistcoord_label, 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.coordinate, 0, 1, 1, 3)
 
-        # Headers: 
-        init_label = QLabel("Inicial")                      # (Linha 1): " " | "Inicial" | "Final"
-        final_label = QLabel("Final")
-        layout.addWidget(init_label, 1, 1, Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(final_label, 1, 2, Qt.AlignmentFlag.AlignCenter)
         
+        self.q1_label = QLabel("q1 [deg]:")                 # (Linha 1): "q1 [deg]:" | "q2 [deg]:" | "d3 [cm]:"
+        self.q2_label = QLabel("q2 [deg]:") 
+        self.d3_label = QLabel("d3 [cm]:") 
+        layout.addWidget(self.q1_label, 1, 1, Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.q2_label, 1, 2, Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.d3_label, 1, 3, Qt.AlignmentFlag.AlignCenter)
+
+        init_label = QLabel("Inicial:")
+        layout.addWidget(init_label, 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.initial_q1, 2, 1, Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.initial_q2, 2, 2, Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.initial_d3, 2, 3, Qt.AlignmentFlag.AlignCenter)
+
+
+        final_label = QLabel("Final:")
+        layout.addWidget(final_label, 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.final_q1, 3, 1, Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.final_q2, 3, 2, Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.final_d3, 3, 3, Qt.AlignmentFlag.AlignCenter)
+        
+        # Headers: 
+        # init_label = QLabel("Inicial")                      # (Linha 1): " " | "Inicial" | "Final"
+        # final_label = QLabel("Final")
+        # layout.addWidget(init_label, 1, 1, Qt.AlignmentFlag.AlignCenter)
+        # layout.addWidget(final_label, 1, 2, Qt.AlignmentFlag.AlignCenter)
+
         # Linhas das juntas: 
-        self.q1_label = QLabel("q1 [deg]:")                 # (Linha 2): "q1 [deg]:" | [entrada: initial_q1] | [entrada: final_q1]
-        layout.addWidget(self.q1_label, 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        layout.addWidget(self.initial_q1, 2, 1)
-        layout.addWidget(self.final_q1, 2, 2)
+        # self.q1_label = QLabel("q1 [deg]:")                 # (Linha 2): "q1 [deg]:" | [entrada: initial_q1] | [entrada: final_q1]
+        # layout.addWidget(self.q1_label, 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        # layout.addWidget(self.initial_q1, 2, 1)
+        # layout.addWidget(self.final_q1, 2, 2)
 
-        self.q2_label = QLabel("q2 [deg]:")                 # (Linha 3): "q2 [deg]:" | [entrada: initial_q2] | [entrada: final_q2]
-        layout.addWidget(self.q2_label, 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        layout.addWidget(self.initial_q2, 3, 1)
-        layout.addWidget(self.final_q2, 3, 2)
+        # self.q2_label = QLabel("q2 [deg]:")                 # (Linha 3): "q2 [deg]:" | [entrada: initial_q2] | [entrada: final_q2]
+        # layout.addWidget(self.q2_label, 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        # layout.addWidget(self.initial_q2, 3, 1)
+        # layout.addWidget(self.final_q2, 3, 2)
 
-        self.d3_label = QLabel("d3 [cm]:")                  # (Linha 4): "d3 [cm]:" | [entrada: initial_q3] | [entrada: final_q3]
-        layout.addWidget(self.d3_label, 4, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        layout.addWidget(self.initial_d3, 4, 1)
-        layout.addWidget(self.final_d3, 4, 2)
+        # self.d3_label = QLabel("d3 [cm]:")                  # (Linha 4): "d3 [cm]:" | [entrada: initial_q3] | [entrada: final_q3]
+        # layout.addWidget(self.d3_label, 4, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        # layout.addWidget(self.initial_d3, 4, 1)
+        # layout.addWidget(self.final_d3, 4, 2)
         
         return group
     
     """--------------------------- 1.X) Painel de Controle -> Campo da Garra ---------------------------"""
-    def create_endEffector_group(self):
-        group = QGroupBox("End-Effector")
+    def create_gripper_group(self):
+        group = QGroupBox("Gripper")
         layout = QGridLayout(group)
         layout.setSpacing(4)
         
@@ -275,19 +299,9 @@ class RobotControlInterface(QMainWindow):
         double_validator.setDecimals(2)
         double_validator.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
 
-        # Ganho
-        self.endeffector_gain = QLineEdit("0")
-        self.endeffector_gain.setValidator(double_validator)
-        self.endeffector_gain.setMaximumHeight(35)
-
-        # Posicionamento
-        self.gain_label = QLabel("Ganho:")
-        layout.addWidget(self.gain_label, 0, 0, Qt.AlignmentFlag.AlignRight)
-        layout.addWidget(self.endeffector_gain, 0, 1)
-
-        # Botões                                                # (Linhas 3-6): Botões ("trajetória", "simular", "parar", "robô")
-        self.gripper_label = QLabel("Abertura Garra:")
-        layout.addWidget(self.gripper_label, 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        # Botões 
+        self.gripper_label = QLabel("Abertura:")
+        layout.addWidget(self.gripper_label, 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
         
         self.gripper_slider = QSlider(Qt.Orientation.Horizontal)
         self.gripper_slider.setMinimum(0)                       # Valor mínimo (garra fechada)
@@ -295,12 +309,11 @@ class RobotControlInterface(QMainWindow):
         self.gripper_slider.setValue(0)                         # Valor inicial
         self.gripper_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.gripper_slider.setTickInterval(10)
-        layout.addWidget(self.gripper_slider, 1, 1, Qt.AlignmentFlag.AlignBottom)
+        layout.addWidget(self.gripper_slider, 0, 1, Qt.AlignmentFlag.AlignBottom)
         
         # Label para mostrar o valor atual
         self.gripper_value_label = QLabel("0º")
-        layout.addWidget(self.gripper_value_label, 1, 2, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(QLabel("        "), 0, 2, Qt.AlignmentFlag.AlignLeft)          # Só pra ajustar espaçamento...
+        layout.addWidget(self.gripper_value_label, 0, 2, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         
         return group
 
@@ -368,9 +381,10 @@ class RobotControlInterface(QMainWindow):
         layout.setSpacing(4)
         
         # Checkbox Controlador                                  # (Linha 0): [checkbox] | "Usar controlador Torque Calculado"
-        self.use_controller = QCheckBox("Usar controlador Torque Calculado")
-        layout.addWidget(self.use_controller, 0, 0, 1, 3)
-        self.use_controller.setChecked(True)
+        # Campos de entrada: Sistema de Coordenadas
+        self.btn_controller = QComboBox()
+        self.btn_controller.addItems(['Torque Calculado', 'PID', 'PID (Baixo Nível)', 'Simulação'])
+        layout.addWidget(self.btn_controller, 0, 0, 1, 4)
 
         # Validador
         double_validator = QDoubleValidator()
@@ -378,34 +392,39 @@ class RobotControlInterface(QMainWindow):
         double_validator.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
 
         # Headers: ganhos Kp, Kd, Ki
-        self.Kp_label = QLabel("Kp")                          # (Linha 1): " " | "Inicial" | "Final"
-        self.Kd_label = QLabel("Kd")
-        self.Ki_label = QLabel("Ki")
+        self.Kp_label = QLabel("Kp:")                          # (Linha 1): " " | "Inicial" | "Final"
+        self.Kd_label = QLabel("Kd:")
+        self.Ki_label = QLabel("Ki:")
+        self.Kt_label = QLabel("Kt:")
         layout.addWidget(self.Kp_label, 1, 0, Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.Kd_label, 1, 1, Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.Ki_label, 1, 2, Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.Kt_label, 1, 3, Qt.AlignmentFlag.AlignCenter)
 
         # Campos para os ganhos
         self.Kp_field = QLineEdit("0.050")
         self.Kd_field = QLineEdit("0.150")
         self.Ki_field = QLineEdit("0.001")
+        self.Kt_field = QLineEdit("1.000")
 
         # Adiciona validador
         self.Kp_field.setValidator(double_validator)
         self.Kd_field.setValidator(double_validator)
         self.Ki_field.setValidator(double_validator)
+        self.Kt_field.setValidator(double_validator)
 
         # Altura (Height)
         self.Kp_field.setMaximumHeight(35)
         self.Kd_field.setMaximumHeight(35)
         self.Ki_field.setMaximumHeight(35)
+        self.Kt_field.setMaximumHeight(35)
 
         # Adicionar os layout
         layout.addWidget(self.Kp_field, 2, 0)
         layout.addWidget(self.Kd_field, 2, 1)
         layout.addWidget(self.Ki_field, 2, 2)
+        layout.addWidget(self.Kt_field, 2, 3)
         
-        self.update_controller(True)
         return group
 
     """--------------------------- 1.3) Painel de Controle -> Campo de Simulação ---------------------------"""
@@ -438,6 +457,7 @@ class RobotControlInterface(QMainWindow):
         layout.addWidget(self.progress_bar)
         
         # Botões                                                # (Linhas 3-6): Botões ("trajetória", "simular", "parar", "robô")
+        self.btn_connect_robot = QPushButton("Conectar ESP32")
         self.btn_simulate = QPushButton("Simular")
         self.btn_stop = QPushButton("Pausar")
         # Adotar o estilo do botão
@@ -449,12 +469,14 @@ class RobotControlInterface(QMainWindow):
                 max-height: 25px;
             }
         """
+        self.btn_connect_robot.setStyleSheet(button_style)
         self.btn_simulate.setStyleSheet(button_style)
         self.btn_stop.setStyleSheet(button_style)
         # Alguns botões são desabilitados inicialmente
         self.btn_stop.setEnabled(False)
         self.btn_simulate.setEnabled(False)
         # Adiciona os Widgets
+        layout.addWidget(self.btn_connect_robot)
         layout.addWidget(self.btn_simulate)
         layout.addWidget(self.btn_stop)
         
@@ -523,31 +545,38 @@ class RobotControlInterface(QMainWindow):
             self.btn_simulate.clicked.connect(self.start_stop_simulation)
             self.btn_stop.clicked.connect(self.pause_resume_simulation)
             self.speed_slider.valueChanged.connect(self.update_speed)
-            self.use_controller.clicked.connect(self.update_controller)
-            self.radio_joint.toggled.connect(self.update_position_labels)
-            # self.btn_send_to_robot.clicked.connect(self.send_to_robot)
+            self.btn_controller.currentTextChanged.connect(self.update_controller)
+            self.coordinate.currentTextChanged.connect(self.update_position_labels)
+            self.btn_connect_robot.clicked.connect(self.connect_robot)
             self.gripper_slider.valueChanged.connect(self.update_gripper)
             self.tabs.currentChanged.connect(self.on_tab_changed)
 
             # Entradas dados: Atualização dos dados (tempo real): textChanged
-            self.initial_q1.textChanged.connect(self.update_coordenate_system)
-            self.initial_q2.textChanged.connect(self.update_coordenate_system)
-            self.initial_d3.textChanged.connect(self.update_coordenate_system)
-            self.final_q1.textChanged.connect(self.update_coordenate_system)
-            self.final_q2.textChanged.connect(self.update_coordenate_system)
-            self.final_d3.textChanged.connect(self.update_coordenate_system)
+            self.initial_q1.textChanged.connect(self.update_coordinate_system)
+            self.initial_q2.textChanged.connect(self.update_coordinate_system)
+            self.initial_d3.textChanged.connect(self.update_coordinate_system)
+            self.final_q1.textChanged.connect(self.update_coordinate_system)
+            self.final_q2.textChanged.connect(self.update_coordinate_system)
+            self.final_d3.textChanged.connect(self.update_coordinate_system)
             self.duration_field.textChanged.connect(self.update_trajectory_params)
             self.dt_field.textChanged.connect(self.update_trajectory_params)
             self.Kp_field.textChanged.connect(self.update_gains)
             self.Kd_field.textChanged.connect(self.update_gains)
             self.Ki_field.textChanged.connect(self.update_gains)
-            self.endeffector_gain.textChanged.connect(self.update_gains)
+            self.Kt_field.textChanged.connect(self.update_gains)
             
             # Conecta com a Thread de simulation_thread.py
             # Quando os sinais chegam, as funções de update são acionadas
             self.simulation_thread.position_updated.connect(self.update_robot_position)
             self.simulation_thread.status_updated.connect(self.update_status)
             self.simulation_thread.progress_updated.connect(self.update_progress)
+
+            # Conecta sinais do CommunicationManager
+            # Status e erros, Conexão, Medições (apenas para log, se necessário)
+            self.comm_manager.status_message.connect(self.update_status)
+            self.comm_manager.error_occurred.connect(lambda msg: self.update_status(f"Erro ESP32: {msg}"))
+            self.comm_manager.connection_changed.connect(self._on_connection_changed)
+            self.comm_manager.measurement_received.connect(self._on_measurement_received)
             
         except Exception as e:
             self.update_status(f"Erro ao configurar conexões: {str(e)}")
@@ -600,7 +629,7 @@ class RobotControlInterface(QMainWindow):
             (self.final_q1, "q1 final"), (self.final_q2, "q2 final"), (self.final_d3, "d3 final"),
             (self.duration_field, "duração"), (self.dt_field, "dt"), 
             (self.Kp_field, "Kp"), (self.Kd_field, "Kd"), (self.Ki_field, "Ki"),
-            (self.endeffector_gain, "End-effector gain")
+            (self.Kt_field, "Kt")
         ]
         
         for field, name in fields:
@@ -636,11 +665,11 @@ class RobotControlInterface(QMainWindow):
             if not self.validate_trajectory_inputs(block):
                 return False
 
-            if self.radio_joint.isChecked():
+            if self.coordinate_mode == "Juntas":
                 if not self.validate_joint_inputs(block):
                     return False
             
-            elif self.radio_cartesian.isChecked():
+            elif self.coordinate_mode == "Cartesiano":
                 if not self.validate_cartesian_inputs(block):
                     return False
             
@@ -878,15 +907,14 @@ class RobotControlInterface(QMainWindow):
             self.btn_calc_trajectory.setEnabled(not enable)
             self.progress_bar.setVisible(enable)
             if enable: self.progress_bar.setValue(0)
-            self.radio_joint.setEnabled(not enable)
-            self.radio_cartesian.setEnabled(not enable)
+            self.coordinate.setEnabled(not enable)
             self.enable_position_buttons(not enable)
             self.duration_field.setEnabled(not enable)
             self.dt_field.setEnabled(not enable)
-            self.use_controller.setEnabled(not enable)
             self.Kp_field.setEnabled(not enable)
             self.Kd_field.setEnabled(not enable)
             self.Ki_field.setEnabled(not enable)
+            self.btn_controller.setEnabled(not enable)
 
     """--------------------------- (Des)Habilita Botões de Posição ---------------------------"""
     def enable_position_buttons(self, enable):
@@ -946,9 +974,15 @@ class RobotControlInterface(QMainWindow):
     """--------------------------- 1.2) Funções de Controle -> Começar/Cancelar Simulação ---------------------------"""
     def start_stop_simulation(self):
         if self.btn_simulate.text() == "Simular":
+            # Verifica trajetória
             if not hasattr(self, 'trajectory') or not self.trajectory:
                 QMessageBox.warning(self, "Aviso", "Calcule trajetória primeiro!")
                 return
+            # Verifica conexão
+            if self.controller.controller != "Simulação":
+                if not self.comm_manager.is_connected():
+                    QMessageBox.warning(self, "Aviso", "ESP32 não conectada. Inicie o servidor primeiro!")
+                    return
             self.start_simulation()
             self.btn_simulate.setText("Cancelar")
         elif self.btn_simulate.text() == "Cancelar":
@@ -959,13 +993,9 @@ class RobotControlInterface(QMainWindow):
     """--------------------------- 1.3) Funções de Controle -> Começar Simulação ---------------------------"""
     def start_simulation(self):
         """Iniciar simulação"""
-        try:        
+        try:
+            # Verifica Inputs (bloqueante)
             if not self.validate_inputs(block=True):
-                return
-
-            # Verifica conexão
-            if not self.comm_manager.is_connected():
-                QMessageBox.warning(self, "Aviso", "ESP32 não conectada. Inicie o servidor primeiro.")
                 return
 
             # Reset visualização
@@ -992,7 +1022,7 @@ class RobotControlInterface(QMainWindow):
         try:
             self.simulation_thread.stop()                                   # Cancelamento da Simulation_Thread
             QTimer.singleShot(1000, lambda: self.update_status("Simulação parada"))
-            self.update_coordenate_system()
+            self.update_coordinate_system()
             self.enable_simulation_buttons(False)
             self.trajectory = None
 
@@ -1033,8 +1063,10 @@ class RobotControlInterface(QMainWindow):
         """Handler para mudança de estado de conexão"""
         if connected:
             self.update_status("ESP32 conectada")
+            self.btn_connect_robot.setText("Desconectar ESP32")
         else:
             self.update_status("ESP32 desconectada")
+            self.btn_connect_robot.setText("Conectar ESP32")
     
     """--------------------------- 1.9) Funções de Controle -> Log de recebimento de dados ---------------------------"""
     def _on_measurement_received(self, measurement):
@@ -1045,7 +1077,15 @@ class RobotControlInterface(QMainWindow):
             measurement: MeasurementData da ESP32
         """
         # Log opcional - a SimulationThread já processa as medições
-        self.update_status(f"Medição: q={measurement.q[:2]}, gripper={measurement.gripper}º")
+        self.update_status(f"Medição: q={measurement.q[:3]}, gripper={measurement.gripper}º")
+
+    """--------------------------- 2.0) Funções de Controle -> Conectar ESP32 ---------------------------"""
+    def connect_robot(self):
+        connection = self.btn_connect_robot.text()
+        if connection == 'Conectar ESP32':
+            self.start_esp32_server(port=self.SERVER_PORT)
+        elif connection == 'Desconectar ESP32':
+            self.stop_esp32_server()
 
     """
     =================================================================================================================
@@ -1064,25 +1104,35 @@ class RobotControlInterface(QMainWindow):
             print(f"Erro ao atualizar velocidade: {e}")
     
     """--------------------------- 2.2) Funções de Update -> Controlador ---------------------------"""
-    def update_controller(self, checked):
+    def update_controller(self, controller):
         """Verifica se o controlador será utilizado"""
+        # Opções: 'Torque Calculado', 'PID', 'PID (Baixo Nível)', 'Simulação'
         try:
-            if checked:
-                self.controller = CalculatedTorqueController(self.robot)
-                self.update_gains()
-            else:
-                if hasattr(self, 'controller'):
-                    self.controller = None
-
-            self.simulation_thread.set_controller(self.controller)
+            self.controller = Controller(self.robot)
+            self.controller.set_controller(controller)
+            self.update_gains()
             
+            self.simulation_thread.set_controller(self.controller)
+
             # Alterar a visibilidade dos Campos
-            self.Kp_label.setVisible(checked)
-            self.Kd_label.setVisible(checked)
-            self.Ki_label.setVisible(checked)
-            self.Kp_field.setVisible(checked)
-            self.Kd_field.setVisible(checked)
-            self.Ki_field.setVisible(checked)
+
+            torque_checked = controller == 'Torque Calculado'
+            if torque_checked:
+                self.Kt_field.setVisible(True)
+                self.Kt_label.setVisible(True)
+            else:
+                self.Kt_field.setVisible(False)
+                self.Kt_label.setVisible(False)
+
+            simulation_unchecked = controller != 'Simulação'
+            self.btn_connect_robot.setChecked(simulation_unchecked)
+            self.btn_connect_robot.setVisible(simulation_unchecked)
+            self.Kp_label.setVisible(simulation_unchecked)
+            self.Kd_label.setVisible(simulation_unchecked)
+            self.Ki_label.setVisible(simulation_unchecked)
+            self.Kp_field.setVisible(simulation_unchecked)
+            self.Kd_field.setVisible(simulation_unchecked)
+            self.Ki_field.setVisible(simulation_unchecked)
         
         except Exception as e:
             print(f"Erro ao atualizar controlador: {e}")
@@ -1138,19 +1188,20 @@ class RobotControlInterface(QMainWindow):
             QMessageBox.critical(self, "Erro", f"Erro na configuração da trajetória: {str(e)}")
     
     """--------------------------- 2.7) Funções de Update -> Mudança do Sistema de Coordenadas ---------------------------"""
-    def update_position_labels(self):
+    def update_position_labels(self, mode):
         """Mudança de sistema de coordenadas: campos da ui e valores internos"""
+        self.coordinate_mode = mode
         with QSignalBlocker(self.initial_q1), QSignalBlocker(self.initial_q2), \
             QSignalBlocker(self.initial_d3), QSignalBlocker(self.final_q1), \
             QSignalBlocker(self.final_q2), QSignalBlocker(self.final_d3):
 
-            if self.radio_joint.isChecked():
+            if mode == "Juntas":
                 # print("Cartesian -> Joint")
                 self.update_status("Transformação: cartesiano -> juntas")
                 self.q1_label.setText("q1 [deg]:")
                 self.q2_label.setText("q2 [deg]:")
                 self.d3_label.setText("d3 [cm]:")
-            elif self.radio_cartesian.isChecked():
+            elif mode == "Cartesiano":
                 # print("Joint -> Cartesian")
                 self.update_status("Transformação: juntas -> cartesiano")
                 self.q1_label.setText("x [m]:")
@@ -1158,7 +1209,7 @@ class RobotControlInterface(QMainWindow):
                 self.d3_label.setText("z [m]:")
             self.set_transformed_inputs()
         
-        self.update_coordenate_system()
+        self.update_coordinate_system()
 
         if not self.validate_inputs(block=False):
             self.update_status("Aviso: Configuração fora dos limites operacionais")
@@ -1172,10 +1223,10 @@ class RobotControlInterface(QMainWindow):
     """--------------------------- 2.7.1) Funções de Update -> Setar dados transformados no Campo de Posição ---------------------------"""
     def set_transformed_inputs(self):
         try:
-            if self.radio_joint.isChecked():
+            if self.coordinate_mode == "Juntas":
                 data0 = [np.rad2deg(self.q0[0]), np.rad2deg(self.q0[1]), 100*self.q0[2]]    # (q1,q2,d3) -> [deg, deg, cm]
                 dataf = [np.rad2deg(self.qf[0]), np.rad2deg(self.qf[1]), 100*self.qf[2]]
-            elif self.radio_cartesian.isChecked():
+            if self.coordinate_mode == "Cartesiano":
                 data0 = self.pos0
                 dataf = self.posf
             
@@ -1195,20 +1246,20 @@ class RobotControlInterface(QMainWindow):
             self.update_status(f"Erro ao alterar o sistema de coordenadas: {str(e)}")
     
     """--------------------------- 2.7.2) Funções de Update -> Transformação de Coordenadas: juntas <-> cartesiano ---------------------------"""
-    def update_coordenate_system(self):
+    def update_coordinate_system(self):
         """Cálculo da transformação de coordenadas: forward- or inverse_kinematics"""
         try:
             if not self.initial_validation(block=False):
                 return
 
             # Cartesian -> joints
-            if self.radio_joint.isChecked():
+            if self.coordinate_mode == "Juntas":
                 self.q0, self.qf = self.read_joints()
                 self.pos0 = self.robot.forward_kinematics(*self.q0)
                 self.posf = self.robot.forward_kinematics(*self.qf)
 
             # Joints -> cartesian
-            elif self.radio_cartesian.isChecked():
+            elif self.coordinate_mode == "Cartesiano":
                 self.pos0, self.posf = self.read_cartesian()
                 self.q0 = self.robot.inverse_kinematics(*self.pos0)
                 self.qf = self.robot.inverse_kinematics(*self.posf)
@@ -1220,10 +1271,10 @@ class RobotControlInterface(QMainWindow):
             self.clear_interface()
             if hasattr(self, 'robot_plot'):
                 self.robot_plot.set_target_position(*self.posf)
-                if self.radio_cartesian.isChecked():
-                    self.robot_plot.set_cartesian_positionining_lines(self.pos0, self.posf)
-                elif self.radio_joint.isChecked():
+                if self.coordinate_mode == "Juntas":
                     self.robot_plot.set_joint_positionining_lines(self.q0, self.qf)
+                elif self.coordinate_mode == "Cartesiano":
+                    self.robot_plot.set_cartesian_positionining_lines(self.pos0, self.posf)
         
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro na transformação do sistema de coordenada: {str(e)}")
@@ -1240,7 +1291,7 @@ class RobotControlInterface(QMainWindow):
             Kp_scaling_factor = float(self.Kp_field.text())
             Kd_scaling_factor = float(self.Kd_field.text())
             Ki_scaling_factor = float(self.Ki_field.text())
-            Kt = float(self.endeffector_gain.text())
+            Kt = float(self.Kt_field.text())
 
             self.controller.set_gain_factors(Kp_scaling_factor, Kd_scaling_factor, Ki_scaling_factor, Kt)
             
@@ -1257,6 +1308,9 @@ class RobotControlInterface(QMainWindow):
         if hasattr(self, 'robot_plot'):
             self.robot_plot.update_gripper_plot(value)
         
+        if self.controller.controller == 'Simulação':
+            return
+
         # Atualiza valor na thread de simulação
         if hasattr(self, "simulation_thread"):
              self.simulation_thread.set_current_gripper_value(value)

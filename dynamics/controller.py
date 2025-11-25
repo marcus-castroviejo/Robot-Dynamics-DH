@@ -20,7 +20,7 @@ Campos deste código:
 """
 import numpy as np
 
-class CalculatedTorqueController:
+class Controller:
     """Controlador Torque Calculado"""
 
     """
@@ -56,6 +56,11 @@ class CalculatedTorqueController:
         # Frequência natural e alocação de um polo p afastado
         self.wn = 3/(self.zeta*self.ts)
         self.p = 5*self.zeta*self.wn
+
+    """--------------------------- Controlador ---------------------------"""
+    def set_controller(self, controller='torque'):
+        """Seleciona o controlador a ser usado: 'Torque Calculado', 'PID', 'PID (Baixo Nível)', 'Simulação'"""
+        self.controller = controller
 
     """--------------------------- Trajetória desejada ---------------------------"""
     def set_trajectory(self, trajectory):
@@ -164,6 +169,7 @@ class CalculatedTorqueController:
         qd_traj = np.array(self.qd_traj[self.counter])
         qdd_traj= np.array(self.qdd_traj[self.counter])
 
+
         # 3) Exige medição disponível
         if self._meas_q is None:
             raise RuntimeError("sem_medidoes")
@@ -180,20 +186,29 @@ class CalculatedTorqueController:
         e_vel = qd_traj - qd_real
         e_acc = qdd_traj - qdd_real
         self.e_int += e_pos * dt
-
-        # 7) Dinâmica no estado medido (q_real, qd_real, qdd_real)
-        M, C, G = self.robot.calculate_dynamics(list(q_real), list(qd_real), list(qdd_real))
-        M = np.array(M, dtype=np.float64)
-        C = np.array(C, dtype=np.float64)
-        G = np.array(G, dtype=np.float64).flatten()
-
-        # 8) Torque Calculado (Computed Torque)
-        # Lei de controle: τ = M(q̈_d + Kd·ė + Kp·e + Ki·∫e) + C·q̇ + G
-        tau = M @ (qdd_traj + self.Kd @ e_vel + self.Kp @ e_pos + self.Ki @ self.e_int) + C @ qd_real + G 
         
-        # 9) Comando de Posição via Mola Virtual
-        # Converte torque em deslocamento de posição
-        q_command = q_real + self.Kt @ tau
+        if self.controller == 'PID (Baixo Nível)':
+            # 7) Controle PID (Baixo Nivel) - Implementação na ESP32
+            q_command = q_real.copy()
+            tau = (0, 0, 0)
+        elif self.contoller == 'PID':
+            # 7) Controle PID
+            q_command = q_traj + self.Kp @ e_pos + self.Kd @ e_vel + self.Ki @ self.e_int
+            tau = (0, 0, 0)
+        elif self.contoller == 'Torque Calculado':
+            # 7) Dinâmica no estado medido (q_real, qd_real, qdd_real)
+            M, C, G = self.robot.calculate_dynamics(list(q_real), list(qd_real), list(qdd_real))
+            M = np.array(M, dtype=np.float64)
+            C = np.array(C, dtype=np.float64)
+            G = np.array(G, dtype=np.float64).flatten()
+
+            # 8) Torque Calculado (Computed Torque)
+            # Lei de controle: τ = M(q̈_d + Kd·ė + Kp·e + Ki·∫e) + C·q̇ + G
+            tau = M @ (qdd_traj + self.Kd @ e_vel + self.Kp @ e_pos + self.Ki @ self.e_int) + C @ qd_real + G 
+        
+            # 9) Comando de Posição via Mola Virtual
+            # Converte torque em deslocamento de posição
+            q_command = q_real + self.Kt @ tau
 
         # 10) salva valores para a próxima derivada
         self.last_q_real = q_real.copy()
@@ -208,6 +223,9 @@ class CalculatedTorqueController:
 
         # 12) Avança contador de iterações
         self.counter += 1
+
+        # 13) Para teste:
+        # q_command = q_command[0], q_traj[1], q_traj[2]
 
         return (q_command, q_real, qd_real, qdd_real, e_pos, e_vel, e_acc, tau)
 
