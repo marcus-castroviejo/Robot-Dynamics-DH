@@ -250,9 +250,9 @@ class RobotControlInterface(QMainWindow):
         layout.addWidget(self.coordinate, 0, 1, 1, 3)
 
         
-        self.q1_label = QLabel("q1 [deg]:")                 # (Linha 1): "q1 [deg]:" | "q2 [deg]:" | "d3 [cm]:"
-        self.q2_label = QLabel("q2 [deg]:") 
-        self.d3_label = QLabel("d3 [cm]:") 
+        self.q1_label = QLabel("q<sub>1</sub> [deg]:")                 # (Linha 1): "q1 [deg]:" | "q2 [deg]:" | "d3 [cm]:"
+        self.q2_label = QLabel("q<sub>2</sub> [deg]:") 
+        self.d3_label = QLabel("d<sub>3</sub> [cm]:") 
         layout.addWidget(self.q1_label, 1, 1, Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.q2_label, 1, 2, Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.d3_label, 1, 3, Qt.AlignmentFlag.AlignCenter)
@@ -383,10 +383,10 @@ class RobotControlInterface(QMainWindow):
         double_validator.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
 
         # Headers: ganhos Kp, Kd, Ki
-        self.Kp_label = QLabel("Kp:")                          # (Linha 1): " " | "Inicial" | "Final"
-        self.Kd_label = QLabel("Kd:")
-        self.Ki_label = QLabel("Ki:")
-        self.Kt_label = QLabel("Kt:")
+        self.Kp_label = QLabel("K<sub>p</sub>")                          # (Linha 1): " " | "Inicial" | "Final"
+        self.Kd_label = QLabel("K<sub>d</sub>")
+        self.Ki_label = QLabel("K<sub>i</sub>")
+        self.Kt_label = QLabel("K<sub>t</sub>")
         layout.addWidget(self.Kp_label, 1, 0, Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.Kd_label, 1, 1, Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.Ki_label, 1, 2, Qt.AlignmentFlag.AlignCenter)
@@ -1185,9 +1185,9 @@ class RobotControlInterface(QMainWindow):
             if mode == "Juntas":
                 # print("Cartesian -> Joint")
                 self.update_status("Transformação: cartesiano -> juntas")
-                self.q1_label.setText("q1 [deg]:")
-                self.q2_label.setText("q2 [deg]:")
-                self.d3_label.setText("d3 [cm]:")
+                self.q1_label.setText("q<sub>1</sub> [deg]:")
+                self.q2_label.setText("q<sub>2</sub> [deg]:")
+                self.d3_label.setText("d<sub>3</sub> [cm]:")
             elif mode == "Cartesiano":
                 # print("Joint -> Cartesian")
                 self.update_status("Transformação: juntas -> cartesiano")
