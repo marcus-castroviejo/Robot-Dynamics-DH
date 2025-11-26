@@ -147,29 +147,20 @@ void Esp32Link_PID::parseLine(const String& line) {
     RobotCommand newCommand; 
     
     // Procura pela trajetória desejada que o Python (V7) envia
-    JsonArray q_d_array = doc["q_d"];
-    JsonArray qd_d_array = doc["qd_d"];
-    JsonArray qdd_d_array = doc["qdd_d"];
+    JsonArray q_cmd_array = doc["q_cmd"];
 
     // Verifica se a trajetória principal chegou
-    if (q_d_array.size() == 3) {
+    if (q_cmd_array.size() == 3) {
       
       // Copia a trajetória (q, qd, qdd)
       for (int i = 0; i < 3; i++) {
-        newCommand.q_d[i] = q_d_array[i];
-        // Checa se qd e qdd também vieram (eles podem ser opcionais)
-        if (qd_d_array.size() == 3) newCommand.qd_d[i] = qd_d_array[i];
-        if (qdd_d_array.size() == 3) newCommand.qdd_d[i] = qdd_d_array[i];
+        newCommand.q_d[i] = q_cmd_array[i];
       }
       
       // Copia o comando da garra (se ele veio junto)
       if (doc.containsKey("gripper")) {
           newCommand.gripper = doc["gripper"]; 
       }
-
-      if (doc.containsKey("kp")) newCommand.kp = doc["kp"];
-      if (doc.containsKey("kd")) newCommand.kd = doc["kd"];
-      if (doc.containsKey("ki")) newCommand.ki = doc["ki"];
       
       // Envia o pacote de comando para o callback (para o .ino)
       if (_onSetReference) {
