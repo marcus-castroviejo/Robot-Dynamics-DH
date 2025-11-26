@@ -152,6 +152,39 @@ class CommunicationManager(QObject):
         cmd = ProtocolBuilder.build_set_gripper(value)
         return self._server.send_json(cmd)
     
+    def send_gains(self, Kp: List[float], Kd: List[float], Ki: List[float]) -> bool:
+        """
+        Envia ganhos do controlador PID para ESP32
+        
+        Args:
+            Kp, Kd, Ki: Ganhos para cada junta (listas de 3 elementos)
+            
+        Returns:
+            True se enviou com sucesso
+        """
+        cmd = ProtocolBuilder.build_set_gains(Kp, Kd, Ki)
+        success = self._server.send_json(cmd)
+        if success:
+            self.status_message.emit(f"Ganhos enviados: Kp={Kp}, Kd={Kd}, Ki={Ki}")
+        return success
+    
+    def send_reference_pid(self, q_ref: List[float], qd_ref: List[float], 
+                          qdd_ref: List[float], gripper: int) -> bool:
+        """
+        Envia referência completa para controle PID de baixo nível
+        
+        Args:
+            q_ref: Posição de referência
+            qd_ref: Velocidade de referência
+            qdd_ref: Aceleração de referência
+            gripper: Posição da garra
+            
+        Returns:
+            True se enviou com sucesso
+        """
+        cmd = ProtocolBuilder.build_set_reference_pid(q_ref, qd_ref, qdd_ref, gripper)
+        return self._server.send_json(cmd)
+
     def get_last_measurement(self) -> Optional[MeasurementData]:
         """
         Retorna última medição recebida

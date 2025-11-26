@@ -22,6 +22,8 @@ class ESP32Commands:
     GET_MEAS = "get_meas"
     SET_REF = "set_ref"
     SET_GRIPPER = "set_gripper"
+    SET_GAINS = "set_gains"           # configurar ganhos
+    SET_REF_PID = "set_ref_pid"       # referência para PID baixo nível
     
     # Comandos de configuração (futuros)
     SET_CONFIG = "set_config"
@@ -103,6 +105,41 @@ class ProtocolBuilder:
         return {
             "cmd": ESP32Commands.SET_GRIPPER,
             "value": int(value)
+        }
+    
+    @staticmethod
+    def build_set_gains(Kp: List[float], Kd: List[float], Ki: List[float]) -> Dict[str, Any]:
+        """
+        Constrói mensagem de configuração de ganhos
+        
+        Args:
+            Kp, Kd, Ki: Ganhos para cada junta [3 valores]
+        """
+        return {
+            "cmd": ESP32Commands.SET_GAINS,
+            "Kp": list(Kp),
+            "Kd": list(Kd),
+            "Ki": list(Ki)
+        }
+    
+    @staticmethod
+    def build_set_reference_pid(q_ref: List[float], qd_ref: List[float], 
+                                 qdd_ref: List[float], gripper: int) -> Dict[str, Any]:
+        """
+        Constrói mensagem de referência para controle PID de baixo nível
+        
+        Args:
+            q_ref: Posição de referência [q1, q2, d3]
+            qd_ref: Velocidade de referência
+            qdd_ref: Aceleração de referência
+            gripper: Posição da garra
+        """
+        return {
+            "cmd": ESP32Commands.SET_REF_PID,
+            "q_ref": list(q_ref),
+            "qd_ref": list(qd_ref),
+            "qdd_ref": list(qdd_ref),
+            "gripper": int(gripper)
         }
 
 

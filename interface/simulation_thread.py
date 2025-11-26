@@ -101,19 +101,33 @@ class SimulationThread(QThread):
             self.is_running = True
             self.status_updated.emit("Simulação iniciada")
             total_points = len(self.trajectory)
+            controller_mode = controller_mode
 
-            if self.controller.controller not in ('Torque Calculado', 'PID', 'PID (Baixo Nível)', 'Simulação'):
-                self.status_updated.emit(f"Erro na simulação: Controlador não definido ({self.controller.controller})")
+            if controller_mode not in ('Torque Calculado', 'PID', 'PID (Baixo Nível)', 'Simulação'):
+                self.status_updated.emit(f"Erro na simulação: Controlador não definido ({controller_mode})")
                 return
 
-            if self.controller.controller != 'Simulação':
+            # Comunicação para modos (exceto Simulação)
+            if controller_mode != 'Simulação':
                 # Verifica se há comunicação
                 if self.comm_manager is None or not self.comm_manager.is_connected():
                     raise RuntimeError("ESP32 não conectada. Inicie o servidor primeiro.")
 
-                # Configura controlador
-                if self.controller:
-                    self.controller.set_trajectory(self.trajectory)
+                # Enviar Ganhos: BAIXO NIVEL
+                if controller_mode == "PID (Baixo Nível)":
+                    self.status_updated.emit("Enviando ganhos para ESP32...")
+
+                    Kp = np.diag(self.controller.Kp).tolist()
+                    Kd = np.diag(self.controller.Kd).tolist()
+                    Ki = np.diag(self.controller.Ki).tolist()
+
+                    if not self.comm_manager.send_gains(Kp, Kd, Ki):
+                        self.status_updated.emit("Aviso: falha ao enviar ganhos")
+                    else:
+                        self.status_updated.emit("Ganhos configurados na ESP32")
+                    
+                    # Pequena pausa para ESP32 processar
+                    self.msleep(100)
 
                 # ===== SINCRONIZAÇÃO INICIAL =====
                 try:
@@ -131,6 +145,10 @@ class SimulationThread(QThread):
                 else:
                     self.status_updated.emit("ESP32 sincronizada")
             
+            # Configura controlador
+            if self.controller:
+                self.controller.set_trajectory(self.trajectory)
+
             # ===== LOOP PRINCIPAL =====
             for i, trajectory_point in enumerate(self.trajectory):
                 # Verifica pausa
@@ -141,8 +159,9 @@ class SimulationThread(QThread):
                     break
 
                 t, q_traj, qd_traj, qdd_traj = trajectory_point
-
-                if self.controller.controller == 'Simulação':
+                
+                # === SIMULACAO ===
+                if controller_mode == 'Simulação':
                     # Sem controlador: usa trajetória direta
                     q_command = None
                     q_real = q_traj.copy()
@@ -152,16 +171,24 @@ class SimulationThread(QThread):
                     e_vel = [0.0, 0.0, 0.0]
                     e_acc = [0.0, 0.0, 0.0]
                     tau = [0.0, 0.0, 0.0]
+                
                 else:
+                    # 0) ENVIAR COMANDO/REFERÊNCIA (BAIXO NIVEL)
+                    if controller_mode == 'PID (Baixo Nível)':
+                        # Envia trajetória completa para ESP32 executar PID
+                        q_ref = list(np.asarray(q_traj, dtype=float).reshape(3))
+                        qd_ref = list(np.asarray(qd_traj, dtype=float).reshape(3))
+                        qdd_ref = list(np.asarray(qdd_traj, dtype=float).reshape(3))
+                        self.comm_manager.send_reference_pid(q_ref, qd_ref, qdd_ref, self.current_gripper_value)
+                    
                     # 1) SOLICITAR MEDIÇÃO
                     self.comm_manager.request_measurement()
                     
                     # 2) AGUARDAR MEDIÇÃO
-                    timeout_ms = int(max(20, 100 / self.speed_factor))                  # [!!!]
+                    timeout_ms = int(max(20, 100 / self.speed_factor))
                     
                     if not self.comm_manager.wait_for_measurement(timeout_ms):
                         self.status_updated.emit("Aguardando medição da ESP32...")
-                        # Tenta novamente
                         self.comm_manager.request_measurement()
                         if not self.comm_manager.wait_for_measurement(timeout_ms):
                             self.status_updated.emit("Timeout ao aguardar medição")
@@ -175,33 +202,43 @@ class SimulationThread(QThread):
                         continue
                     
                     # 4) PROCESSAR CONTROLADOR
-                    try:
-                        # Entrega medição ao controlador
-                        self.controller.set_measurement(measurement.q, t=measurement.timestamp)
+                    if controller_mode == 'PID (Baixo Nível)':
+                        q_real = measurement.q
+                        qd_real = qd_traj           # Aproximação para plotagem
+                        qdd_real = qdd_traj
+                        e_pos = [q_traj[j] - q_real[j] for j in range(3)]
+                        e_vel = [0.0, 0.0, 0.0]
+                        e_acc = [0.0, 0.0, 0.0]
+                        tau = [0.0, 0.0, 0.0]
                         
-                        # Calcula controle
-                        (
-                            q_command,   # Comando de posição calculado
-                            q_real,      # Posição real medida
-                            qd_real,     # Velocidade calculada
-                            qdd_real,    # Aceleração calculada
-                            e_pos,       # Erro de posição
-                            e_vel,       # Erro de velocidade
-                            e_acc,       # Erro de aceleração
-                            tau          # Torque calculado
-                        ) = self.controller.update_control_position()
+                    else:
+                        try:
+                            # Entrega medição ao controlador
+                            self.controller.set_measurement(measurement.q, t=measurement.timestamp)
+                            
+                            # Calcula controle
+                            (
+                                q_command,   # Comando de posição calculado
+                                q_real,      # Posição real medida
+                                qd_real,     # Velocidade calculada
+                                qdd_real,    # Aceleração calculada
+                                e_pos,       # Erro de posição
+                                e_vel,       # Erro de velocidade
+                                e_acc,       # Erro de aceleração
+                                tau          # Torque calculado
+                            ) = self.controller.update_control_position()
+                        
+                        except RuntimeError as ex:
+                            if str(ex) == "sem_medidoes":
+                                self.status_updated.emit("Aguardando primeira medição válida...")
+                                continue
+                            else:
+                                raise
                     
-                    except RuntimeError as ex:
-                        if str(ex) == "sem_medidoes":
-                            self.status_updated.emit("Aguardando primeira medição válida...")
-                            continue
-                        else:
-                            raise
-                
-                    # 5) ENVIAR COMANDO
-                    # TODO: Trocar q_traj por q_command quando tudo estiver funcionando
-                    q_to_send = list(np.asarray(q_traj, dtype=float).reshape(3))
-                    self.comm_manager.send_reference(q_to_send, self.current_gripper_value)
+                        # 5) ENVIAR COMANDO
+                        # TODO: Trocar q_traj por q_command quando tudo estiver funcionando
+                        q_to_send = list(np.asarray(q_command, dtype=float).reshape(3))
+                        self.comm_manager.send_reference(q_to_send, self.current_gripper_value)
                 
                 # 6) ATUALIZAR INTERFACE
                 self.position_updated.emit(

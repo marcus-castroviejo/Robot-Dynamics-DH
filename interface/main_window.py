@@ -191,11 +191,11 @@ class RobotControlInterface(QMainWindow):
         
         # Adicionando os Campos
         layout.addWidget(self.create_positions_group())     # (Linha 1): Campo de Posição
-        layout.addWidget(self.create_gripper_group())
-        layout.addWidget(self.create_trajectory_group())    # (Linha 2): Campo de trajetória
-        layout.addWidget(self.create_control_group())
-        layout.addWidget(self.create_simulation_group())    # (Linha 3): Campo de Simulação
-        layout.addWidget(self.create_status_group())        # (Linha 4): Campo de Status
+        layout.addWidget(self.create_gripper_group())       # (Linha 2): Campo de Gripper
+        layout.addWidget(self.create_trajectory_group())    # (Linha 3): Campo de Trajetória
+        layout.addWidget(self.create_control_group())       # (Linha 4): Campo de Simulação
+        layout.addWidget(self.create_simulation_group())    # (Linha 5): Campo de Simulação
+        layout.addWidget(self.create_status_group())        # (Linha 6): Campo de Status
         
         layout.addStretch()
         return panel
@@ -222,10 +222,10 @@ class RobotControlInterface(QMainWindow):
         # Campos de entrada: q_0 e q_f | pos_0 e pos_f
         self.initial_q1 = QLineEdit("0")                    # [entrada] q_0[1]
         self.initial_q2 = QLineEdit("80")                   # [entrada] q_0[2]
-        self.initial_d3 = QLineEdit("3")                  # [entrada] q_0[3]
+        self.initial_d3 = QLineEdit("3")                    # [entrada] q_0[3]
         self.final_q1 = QLineEdit("90")                     # [entrada] q_f[1]
         self.final_q2 = QLineEdit("135")                    # [entrada] q_f[2]
-        self.final_d3 = QLineEdit("8")                    # [entrada] q_f[3]
+        self.final_d3 = QLineEdit("8")                      # [entrada] q_f[3]
         # Validador
         self.initial_q1.setValidator(double_validator)
         self.initial_q2.setValidator(double_validator)
