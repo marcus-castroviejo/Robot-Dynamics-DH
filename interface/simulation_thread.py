@@ -203,7 +203,7 @@ class SimulationThread(QThread):
                     
                     # 4) PROCESSAR CONTROLADOR
                     if controller_mode == 'PID (Baixo Nível)':
-                        q_real = measurement.q
+                        q_real = q_traj
                         qd_real = qd_traj           # Aproximação para plotagem
                         qdd_real = qdd_traj
                         e_pos = [q_traj[j] - q_real[j] for j in range(3)]
