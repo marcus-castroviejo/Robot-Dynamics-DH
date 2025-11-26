@@ -167,23 +167,6 @@ class CommunicationManager(QObject):
         if success:
             self.status_message.emit(f"Ganhos enviados: Kp={Kp}, Kd={Kd}, Ki={Ki}")
         return success
-    
-    def send_reference_pid(self, q_ref: List[float], qd_ref: List[float], 
-                          qdd_ref: List[float], gripper: int) -> bool:
-        """
-        Envia referência completa para controle PID de baixo nível
-        
-        Args:
-            q_ref: Posição de referência
-            qd_ref: Velocidade de referência
-            qdd_ref: Aceleração de referência
-            gripper: Posição da garra
-            
-        Returns:
-            True se enviou com sucesso
-        """
-        cmd = ProtocolBuilder.build_set_reference_pid(q_ref, qd_ref, qdd_ref, gripper)
-        return self._server.send_json(cmd)
 
     def get_last_measurement(self) -> Optional[MeasurementData]:
         """

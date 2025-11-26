@@ -174,12 +174,12 @@ class SimulationThread(QThread):
                 
                 else:
                     # 0) ENVIAR COMANDO/REFERÊNCIA (BAIXO NIVEL)
-                    if controller_mode == 'PID (Baixo Nível)':
-                        # Envia trajetória completa para ESP32 executar PID
-                        q_ref = list(np.asarray(q_traj, dtype=float).reshape(3))
-                        qd_ref = list(np.asarray(qd_traj, dtype=float).reshape(3))
-                        qdd_ref = list(np.asarray(qdd_traj, dtype=float).reshape(3))
-                        self.comm_manager.send_reference_pid(q_ref, qd_ref, qdd_ref, self.current_gripper_value)
+                    # if controller_mode == 'PID (Baixo Nível)':
+                    #     # Envia trajetória completa para ESP32 executar PID
+                    #     q_ref = list(np.asarray(q_traj, dtype=float).reshape(3))
+                    #     qd_ref = list(np.asarray(qd_traj, dtype=float).reshape(3))
+                    #     qdd_ref = list(np.asarray(qdd_traj, dtype=float).reshape(3))
+                    #     self.comm_manager.send_reference_pid(q_ref, qd_ref, qdd_ref, self.current_gripper_value)
                     
                     # 1) SOLICITAR MEDIÇÃO
                     self.comm_manager.request_measurement()
