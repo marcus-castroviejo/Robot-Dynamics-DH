@@ -125,18 +125,18 @@ class CommunicationManager(QObject):
         cmd = ProtocolBuilder.build_get_measurement()
         return self._server.send_json(cmd)
     
-    def send_reference(self, q_cmd: List[float], gripper: int) -> bool:
+    def send_reference(self, q_d: List[float], gripper: int) -> bool:
         """
         Envia comando de referência (posição das juntas + garra)
         
         Args:
-            q_cmd: Comando de posição [q1, q2, d3]
+            q_d: Comando de posição [q1, q2, d3]
             gripper: Posição da garra (graus)
             
         Returns:
             True se enviou com sucesso
         """
-        cmd = ProtocolBuilder.build_set_reference(q_cmd, gripper)
+        cmd = ProtocolBuilder.build_set_reference(q_d, gripper)
         return self._server.send_json(cmd)
     
     def send_gripper_command(self, value: int) -> bool:
@@ -152,7 +152,7 @@ class CommunicationManager(QObject):
         cmd = ProtocolBuilder.build_set_gripper(value)
         return self._server.send_json(cmd)
     
-    def send_gains(self, Kp: List[float], Kd: List[float], Ki: List[float]) -> bool:
+    def send_gains(self, Kp: float, Kd: float, Ki: float) -> bool:
         """
         Envia ganhos do controlador PID para ESP32
         

@@ -101,7 +101,7 @@ class SimulationThread(QThread):
             self.is_running = True
             self.status_updated.emit("Simulação iniciada")
             total_points = len(self.trajectory)
-            controller_mode = controller_mode
+            controller_mode = self.controller.controller
 
             if controller_mode not in ('Torque Calculado', 'PID', 'PID (Baixo Nível)', 'Simulação'):
                 self.status_updated.emit(f"Erro na simulação: Controlador não definido ({controller_mode})")
@@ -121,10 +121,17 @@ class SimulationThread(QThread):
                     Kd = self.controller.Kd[0, 0]
                     Ki = self.controller.Ki[0, 0]
 
+                    print(Kp, Ki, Kd)
+
                     if not self.comm_manager.send_gains(Kp, Kd, Ki):
                         self.status_updated.emit("Aviso: falha ao enviar ganhos")
                     else:
                         self.status_updated.emit("Ganhos configurados na ESP32")
+                    
+                    if not self.comm_manager.send_reference(self.trajectory[0][1], self.current_gripper_value):
+                        self.status_updated.emit("Aviso: falha ao enviar a trajetória")
+                    else:
+                        self.status_updated.emit("Trajetória configurada na ESP32")
                     
                     # Pequena pausa para ESP32 processar
                     self.msleep(100)

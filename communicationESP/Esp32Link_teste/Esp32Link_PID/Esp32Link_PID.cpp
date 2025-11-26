@@ -147,14 +147,14 @@ void Esp32Link_PID::parseLine(const String& line) {
     RobotCommand newCommand; 
     
     // Procura pela trajetória desejada que o Python (V7) envia
-    JsonArray q_cmd_array = doc["q_cmd"];
+    JsonArray q_d_array = doc["q_d"];
 
     // Verifica se a trajetória principal chegou
-    if (q_cmd_array.size() == 3) {
+    if (q_d_array.size() == 3) {
       
       // Copia a trajetória (q, qd, qdd)
       for (int i = 0; i < 3; i++) {
-        newCommand.q_d[i] = q_cmd_array[i];
+        newCommand.q_d[i] = q_d_array[i];
       }
       
       // Copia o comando da garra (se ele veio junto)

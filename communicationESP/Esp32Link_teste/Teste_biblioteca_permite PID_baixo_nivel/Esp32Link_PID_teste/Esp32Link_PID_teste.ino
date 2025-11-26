@@ -1,9 +1,9 @@
 #include <Esp32Link_PID.h> 
 
 // ======= Configuração da rede =======
-const char* STA_SSID  = "Aron's web";      // nome da rede
-const char* STA_PASS  = "25122512";        // senha
-const char* SERVER_IP = "10.224.214.79";   // IP do PC
+const char* STA_SSID  = "iPhone de Marcus Vinicius";      // nome da rede
+const char* STA_PASS  = "zv8Z-bSeC-R8g4-eUi7";        // senha
+const char* SERVER_IP = "172.20.10.3";   // IP do PC
 const uint16_t SERVER_PORT = 9000;         // porta
 // ==============================
 
@@ -21,6 +21,18 @@ void setup() {
   delay(200);
   Serial.println("\n[ESP] Inicializando (Projeto 3)...");
 
+  // ===== ADICIONE AQUI: Inicializar com posição padrão =====
+  currentCommand.q_d[0] = 0.0;        // q1 = 0 rad
+  currentCommand.q_d[1] = 1.396;      // q2 = 80° em radianos
+  currentCommand.q_d[2] = 0.03;       // d3 = 3 cm em metros
+  currentCommand.gripper = 0;
+  
+  // Inicializar medição também
+  for (int i = 0; i < 3; i++) {
+    currentMeasurement.q[i] = currentCommand.q_d[i];
+  }
+  currentMeasurement.gripper = currentCommand.gripper;
+  // ========================================================
   // --- 1. Configurar os Callbacks  ---
   net.onConnected([](){
     Serial.println("[ESP] Conectado ao servidor do PC!");

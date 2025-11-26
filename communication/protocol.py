@@ -79,17 +79,17 @@ class ProtocolBuilder:
         return {"cmd": ESP32Commands.GET_MEAS}
     
     @staticmethod
-    def build_set_reference(q_cmd: List[float], gripper: int) -> Dict[str, Any]:
+    def build_set_reference(q_d: List[float], gripper: int) -> Dict[str, Any]:
         """
         Constrói mensagem de definição de referência
         
         Args:
-            q_cmd: Comando de posição das juntas [q1, q2, d3]
+            q_d: Comando de posição das juntas [q1, q2, d3]
             gripper: Posição da garra (graus)
         """
         return {
             "cmd": ESP32Commands.SET_REF,
-            "q_cmd": list(q_cmd),
+            "q_d": list(q_d),
             "gripper": int(gripper)
         }
     
