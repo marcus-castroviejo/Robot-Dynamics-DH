@@ -117,9 +117,9 @@ class SimulationThread(QThread):
                 if controller_mode == "PID (Baixo Nível)":
                     self.status_updated.emit("Enviando ganhos para ESP32...")
 
-                    Kp = np.diag(self.controller.Kp).tolist()
-                    Kd = np.diag(self.controller.Kd).tolist()
-                    Ki = np.diag(self.controller.Ki).tolist()
+                    Kp = self.controller.Kp[0, 0]
+                    Kd = self.controller.Kd[0, 0]
+                    Ki = self.controller.Ki[0, 0]
 
                     if not self.comm_manager.send_gains(Kp, Kd, Ki):
                         self.status_updated.emit("Aviso: falha ao enviar ganhos")
@@ -173,14 +173,6 @@ class SimulationThread(QThread):
                     tau = [0.0, 0.0, 0.0]
                 
                 else:
-                    # 0) ENVIAR COMANDO/REFERÊNCIA (BAIXO NIVEL)
-                    # if controller_mode == 'PID (Baixo Nível)':
-                    #     # Envia trajetória completa para ESP32 executar PID
-                    #     q_ref = list(np.asarray(q_traj, dtype=float).reshape(3))
-                    #     qd_ref = list(np.asarray(qd_traj, dtype=float).reshape(3))
-                    #     qdd_ref = list(np.asarray(qdd_traj, dtype=float).reshape(3))
-                    #     self.comm_manager.send_reference_pid(q_ref, qd_ref, qdd_ref, self.current_gripper_value)
-                    
                     # 1) SOLICITAR MEDIÇÃO
                     self.comm_manager.request_measurement()
                     

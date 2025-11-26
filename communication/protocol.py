@@ -107,7 +107,7 @@ class ProtocolBuilder:
         }
     
     @staticmethod
-    def build_set_gains(Kp: List[float], Kd: List[float], Ki: List[float]) -> Dict[str, Any]:
+    def build_set_gains(Kp: float, Kd: float, Ki: float) -> Dict[str, Any]:
         """
         Constrói mensagem de configuração de ganhos
         
@@ -116,9 +116,9 @@ class ProtocolBuilder:
         """
         return {
             "cmd": ESP32Commands.SET_GAINS,
-            "Kp": list(Kp),
-            "Kd": list(Kd),
-            "Ki": list(Ki)
+            "Kp": float(Kp),
+            "Kd": float(Kd),
+            "Ki": float(Ki)
         }
 
 class ProtocolParser:
