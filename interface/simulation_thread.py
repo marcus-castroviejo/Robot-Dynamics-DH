@@ -115,6 +115,12 @@ class SimulationThread(QThread):
 
                 # Enviar Ganhos: BAIXO NIVEL
                 if controller_mode == "PID (Baixo Nível)":
+                    kp, kd, ki = self.controller.Kp, self.controller.Kd, self.controller.Ki
+
+                    if not self.comm_manager.send_gains(kp, kd, ki):
+                        self.status_updated.emit("Aviso: falha ao enviar os ganhos")
+                    else:
+                        self.status_updated.emit("Ganhos configurados na ESP32")
                     
                     if not self.comm_manager.send_reference(self.trajectory[0][1], self.current_gripper_value):
                         self.status_updated.emit("Aviso: falha ao enviar a trajetória")

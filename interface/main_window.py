@@ -382,7 +382,7 @@ class RobotControlInterface(QMainWindow):
         double_validator.setDecimals(5)
         double_validator.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
 
-        # Headers: ganhos Kp, Kd, Ki
+        # Headers: ganhos kp, kd, ki
         self.Kp_label = QLabel("K<sub>p</sub>")                          # (Linha 1): " " | "Inicial" | "Final"
         self.Kd_label = QLabel("K<sub>d</sub>")
         self.Ki_label = QLabel("K<sub>i</sub>")
@@ -614,7 +614,7 @@ class RobotControlInterface(QMainWindow):
             (self.initial_q1, "q1 inicial"), (self.initial_q2, "q2 inicial"), (self.initial_d3, "d3 inicial"),
             (self.final_q1, "q1 final"), (self.final_q2, "q2 final"), (self.final_d3, "d3 final"),
             (self.duration_field, "duração"), (self.dt_field, "dt"), 
-            (self.Kp_field, "Kp"), (self.Kd_field, "Kd"), (self.Ki_field, "Ki"),
+            (self.Kp_field, "kp"), (self.Kd_field, "kd"), (self.Ki_field, "ki"),
             (self.Kt_field, "Kt")
         ]
         
@@ -1291,18 +1291,18 @@ class RobotControlInterface(QMainWindow):
             Ki_scaling_factor = float(self.Ki_field.text())
             Kt = float(self.Kt_field.text())
 
-            Kp = Kp_scaling_factor
-            Kd = Kd_scaling_factor
-            Ki = Ki_scaling_factor
+            kp = Kp_scaling_factor
+            kd = Kd_scaling_factor
+            ki = Ki_scaling_factor
 
             # self.controller.set_gain_factors(Kp_scaling_factor, Kd_scaling_factor, Ki_scaling_factor, Kt)
-            self.controller.set_gains(Kp, Kd, Ki, Kt)
+            self.controller.set_gains(kp, kd, ki, Kt)
 
             # Se simulação NÃO está rodando, envia comando direto
             if not (self.simulation_thread and self.simulation_thread.is_running):
-                self.comm_manager.send_gains(Kp, Kd, Ki)
+                self.comm_manager.send_gains(kp, kd, ki)
             # ===== DEBUG =====
-            print(f"[DEBUG PY] Kp={Kp}, Kd={Kd}, Ki={Ki}")
+            print(f"[DEBUG PY] kp={kp}, kd={kd}, ki={ki}")
             # =================
             
         except Exception as e:

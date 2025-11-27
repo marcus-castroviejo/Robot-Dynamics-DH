@@ -153,20 +153,20 @@ class CommunicationManager(QObject):
         cmd = ProtocolBuilder.build_set_gripper(value)
         return self._server.send_json(cmd)
     
-    def send_gains(self, Kp: float, Kd: float, Ki: float) -> bool:
+    def send_gains(self, kp: float, kd: float, ki: float) -> bool:
         """
         Envia ganhos do controlador PID para ESP32
         
         Args:
-            Kp, Kd, Ki: Ganhos para cada junta (listas de 3 elementos)
+            kp, kd, ki: Ganhos para cada junta (listas de 3 elementos)
             
         Returns:
             True se enviou com sucesso
         """
-        cmd = ProtocolBuilder.build_set_gains(Kp, Kd, Ki)
+        cmd = ProtocolBuilder.build_set_gains(kp, kd, ki)
         success = self._server.send_json(cmd)
         if success:
-            self.status_message.emit(f"Ganhos enviados: Kp={Kp}, Kd={Kd}, Ki={Ki}")
+            self.status_message.emit(f"Ganhos enviados: kp={kp}, kd={kd}, ki={ki}")
         return success
 
     def get_last_measurement(self) -> Optional[MeasurementData]:
