@@ -17,7 +17,7 @@ from typing import Optional, List
 import logging
 
 from .esp32_server import ESP32Server
-from .protocol import (
+from .protocol_original import (
     ProtocolBuilder, ProtocolParser, MeasurementData,
     ESP32Commands, ESP32Responses
 )
@@ -51,6 +51,7 @@ class CommunicationManager(QObject):
         super().__init__(parent)
         
         self._logger = logging.getLogger("rrp_app.comm_manager")
+        self._logger.setLevel(logging.DEBUG)
         
         # Servidor TCP
         self._server = ESP32Server(self)

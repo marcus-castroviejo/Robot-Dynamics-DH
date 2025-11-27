@@ -8,8 +8,6 @@ entre o PC e a ESP32.
 Protocolo: NDJSON (Newline Delimited JSON)
 - Cada mensagem é um objeto JSON terminado com '\n'
 - Comunicação bidirecional: PC ↔ ESP32
-
-VERSÃO CORRIGIDA: Compatível com bibliotecas ESP32
 """
 
 from typing import Dict, List, Any
@@ -24,7 +22,7 @@ class ESP32Commands:
     GET_MEAS = "get_meas"
     SET_REF = "set_ref"
     SET_GRIPPER = "set_gripper"
-    SET_GAINS = "set_gains"
+    SET_GAINS = "set_gains"           # configurar ganhos
     
     # Comandos de configuração (futuros)
     SET_CONFIG = "set_config"
@@ -35,9 +33,10 @@ class ESP32Responses:
     """Tipos de resposta esperados da ESP32"""
     
     PONG = "pong"
-    OK = "ok"
+    REF_ACK = "ref"
     MEASUREMENT = "meas_q"
-    ERROR = "err"
+    STATUS = "status"
+    ERROR = "error"
 
 
 @dataclass
@@ -80,39 +79,19 @@ class ProtocolBuilder:
         return {"cmd": ESP32Commands.GET_MEAS}
     
     @staticmethod
-    def build_set_reference(q_cmd: List[float], gripper: int, 
-                           qd_cmd: List[float] = None, 
-                           qdd_cmd: List[float] = None) -> Dict[str, Any]:
+    def build_set_reference(q_d: List[float], gripper: int) -> Dict[str, Any]:
         """
         Constrói mensagem de definição de referência
         
         Args:
-            q_cmd: Comando de posição [q1, q2, d3]
+            q_d: Comando de posição das juntas [q1, q2, d3]
             gripper: Posição da garra (graus)
-            qd_cmd: Comando de velocidade (opcional, para PID baixo nível)
-            qdd_cmd: Comando de aceleração (opcional, para PID baixo nível)
-            
-        Returns:
-            Dicionário com comando formatado
         """
-        # IMPORTANTE: Usar "q_cmd" para compatibilidade com ESP32 básica
-        # E "q_d" para compatibilidade com ESP32 PID
-        # Enviaremos ambos para máxima compatibilidade
-        
-        cmd = {
+        return {
             "cmd": ESP32Commands.SET_REF,
-            "q_cmd": list(q_cmd),      # Para Esp32Link básica
-            "q_d": list(q_cmd),        # Para Esp32Link_PID
+            "q_d": list(q_d),
             "gripper": int(gripper)
         }
-        
-        # Se fornecidos, adiciona velocidade e aceleração (PID baixo nível)
-        if qd_cmd is not None:
-            cmd["qd_d"] = list(qd_cmd)
-        if qdd_cmd is not None:
-            cmd["qdd_d"] = list(qdd_cmd)
-        
-        return cmd
     
     @staticmethod
     def build_set_gripper(value: int) -> Dict[str, Any]:
@@ -128,22 +107,19 @@ class ProtocolBuilder:
         }
     
     @staticmethod
-    def build_set_gains(kp: float, kd: float, ki: float) -> Dict[str, Any]:
+    def build_set_gains(Kp: float, Kd: float, Ki: float) -> Dict[str, Any]:
         """
         Constrói mensagem de configuração de ganhos
         
         Args:
-            kp, kd, ki: Ganhos do controlador PID
-            
-        IMPORTANTE: Usar lowercase para compatibilidade com ESP32
+            Kp, Kd, Ki: Ganhos para cada junta [3 valores]
         """
         return {
             "cmd": ESP32Commands.SET_GAINS,
-            "kp": float(kp),      # lowercase!
-            "kd": float(kd),
-            "ki": float(ki)
+            "Kp": float(Kp),
+            "Kd": float(Kd),
+            "Ki": float(Ki)
         }
-
 
 class ProtocolParser:
     """Parser de mensagens recebidas"""
@@ -154,24 +130,14 @@ class ProtocolParser:
         return ESP32Responses.PONG in message
     
     @staticmethod
-    def is_ok(message: Dict[str, Any]) -> bool:
-        """Verifica se a mensagem é confirmação OK"""
-        return message.get(ESP32Responses.OK, False)
+    def is_ref_ack(message: Dict[str, Any]) -> bool:
+        """Verifica se a mensagem é confirmação de referência"""
+        return ESP32Responses.REF_ACK in message
     
     @staticmethod
     def is_measurement(message: Dict[str, Any]) -> bool:
         """Verifica se a mensagem contém dados de medição"""
         return ESP32Responses.MEASUREMENT in message
-    
-    @staticmethod
-    def has_error(message: Dict[str, Any]) -> bool:
-        """Verifica se a mensagem contém erro"""
-        return ESP32Responses.ERROR in message
-    
-    @staticmethod
-    def get_error(message: Dict[str, Any]) -> str:
-        """Extrai mensagem de erro"""
-        return message.get(ESP32Responses.ERROR, "Erro desconhecido")
     
     @staticmethod
     def parse_measurement(message: Dict[str, Any]) -> MeasurementData:
@@ -185,3 +151,8 @@ class ProtocolParser:
             raise ValueError("Mensagem não contém dados de medição")
         
         return MeasurementData.from_dict(message)
+    
+    @staticmethod
+    def get_ref_value(message: Dict[str, Any]) -> Any:
+        """Extrai valor de confirmação de referência"""
+        return message.get(ESP32Responses.REF_ACK)

@@ -78,7 +78,7 @@ class SimulationThread(QThread):
     def set_communication_manager(self, comm_manager):
         """Injeta o gerenciador de comunicação"""
         self.comm_manager = comm_manager
-    
+
     """--------------------------- Atualiza valor da garra ---------------------------"""
     def set_current_gripper_value(self, value: int):
         """Atualiza o valor desejado da garra (recebe em graus)"""
@@ -115,18 +115,6 @@ class SimulationThread(QThread):
 
                 # Enviar Ganhos: BAIXO NIVEL
                 if controller_mode == "PID (Baixo Nível)":
-                    self.status_updated.emit("Enviando ganhos para ESP32...")
-
-                    Kp = self.controller.Kp[0, 0]
-                    Kd = self.controller.Kd[0, 0]
-                    Ki = self.controller.Ki[0, 0]
-
-                    print(Kp, Ki, Kd)
-
-                    if not self.comm_manager.send_gains(Kp, Kd, Ki):
-                        self.status_updated.emit("Aviso: falha ao enviar ganhos")
-                    else:
-                        self.status_updated.emit("Ganhos configurados na ESP32")
                     
                     if not self.comm_manager.send_reference(self.trajectory[0][1], self.current_gripper_value):
                         self.status_updated.emit("Aviso: falha ao enviar a trajetória")

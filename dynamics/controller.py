@@ -106,7 +106,18 @@ class Controller:
         self.use_external_meas = True 
         self._meas_q = None
         self._meas_t = None
-        
+    
+    def set_gains(self, Kp=0.050, Kd=0.150, Ki=0.001, Kt=1):
+        self.Kp = Kp
+        self.Kd = Kd
+        self.Ki = Ki
+        self.Kt = Kt
+
+        # --- estado de medição externa (ESP32) ---
+        self.use_external_meas = True 
+        self._meas_q = None
+        self._meas_t = None
+
     """--------------------------- Estados reais das juntas ---------------------------"""
     def set_measurement(self, q_meas, t=None):
         """Recebe medição de posição das juntas (da ESP32 via CommunicationManager)"""

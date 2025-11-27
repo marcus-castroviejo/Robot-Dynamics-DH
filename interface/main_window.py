@@ -1283,7 +1283,7 @@ class RobotControlInterface(QMainWindow):
             if not self.initial_validation(block=False):
                 return
             
-            if not hasattr(self, "controller") or self.controller:
+            if not hasattr(self, "controller"):
                 return
             
             Kp_scaling_factor = float(self.Kp_field.text())
@@ -1291,7 +1291,19 @@ class RobotControlInterface(QMainWindow):
             Ki_scaling_factor = float(self.Ki_field.text())
             Kt = float(self.Kt_field.text())
 
-            self.controller.set_gain_factors(Kp_scaling_factor, Kd_scaling_factor, Ki_scaling_factor, Kt)
+            Kp = Kp_scaling_factor
+            Kd = Kd_scaling_factor
+            Ki = Ki_scaling_factor
+
+            # self.controller.set_gain_factors(Kp_scaling_factor, Kd_scaling_factor, Ki_scaling_factor, Kt)
+            self.controller.set_gains(Kp, Kd, Ki, Kt)
+
+            # Se simulação NÃO está rodando, envia comando direto
+            if not (self.simulation_thread and self.simulation_thread.is_running):
+                self.comm_manager.send_gains(Kp, Kd, Ki)
+            # ===== DEBUG =====
+            print(f"[DEBUG PY] Kp={Kp}, Kd={Kd}, Ki={Ki}")
+            # =================
             
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao atualizar os ganhos: {str(e)}")
